@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agents/roster.yaml",
+  "description": "The agent roles: model, effort, tools, permissions and skills (agent-roster spec sections 2.1 to 2.3, 2.7 and 6).",
+  "type": "object",
+  "required": ["jira_tools", "mcp_tools", "vendored_skills", "roles"],
+  "additionalProperties": false,
+  "properties": {
+    "jira_tools": {
+      "type": "object",
+      "required": ["read", "create", "edit", "comment", "transition"],
+      "additionalProperties": false,
+      "properties": {
+        "read": { "$ref": "#/$defs/toolNames" },
+        "create": { "$ref": "#/$defs/toolNames" },
+        "edit": { "$ref": "#/$defs/toolNames" },
+        "comment": { "$ref": "#/$defs/toolNames" },
+        "transition": { "$ref": "#/$defs/toolNames" }
+      }
+    },
+    "mcp_tools": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1,
+        "propertyNames": { "$ref": "#/$defs/id" },
+        "additionalProperties": { "$ref": "#/$defs/toolNames" }
+      }
+    },
+    "vendored_skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "repo", "path", "commit"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "$ref": "#/$defs/id" },
+          "repo": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
+          "path": { "type": "string", "pattern": "^[\\w.-]+(/[\\w.-]+)*$" },
+          "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "upstream_name": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/role" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "text": { "type": "string", "minLength": 1 },
+    "toolNames": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" }
+    },
+    "role": {
+      "type": "object",
+      "required": ["description", "model", "effort", "tools", "jira", "git", "writes", "skills"],
+      "additionalProperties": false,
+      "properties": {
+        "description": { "$ref": "#/$defs/text" },
+        "model": { "enum": ["haiku", "sonnet", "opus"] },
+        "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
+        "max_turns": { "type": "integer", "minimum": 1 },
+        "tools": { "type": "array", "uniqueItems": true, "items": { "enum": ["Bash", "Edit", "Write"] } },
+        "mcp": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+        },
+        "jira": {
+          "type": "array",
+          "uniqueItems": true,
+          "contains": { "const": "read" },
+          "items": { "enum": ["read", "create", "edit", "comment", "transition"] }
+        },
+        "git": { "enum": ["read", "write"] },
+        "writes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/text" } },
+        "skills": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      }
+    }
+  }
+}

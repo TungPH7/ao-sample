@@ -1,0 +1,3 @@
+#!/bin/sh
+# quality-gates spec 2.3: only a pull request changes develop, main or release/*.
+exec node .ai-orchestrator/scripts/pre-push.mjs "$@"

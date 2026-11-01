@@ -1,0 +1,7 @@
+# GitHub for Jira (tracker-integration spec section 2.9): which Jira environment type each GitHub environment is, for
+# the Deployments panel. Keep it on the default branch; the first time, disconnect and reconnect the GitHub app.
+deployments:
+  environmentMapping:
+    development: ["development"]
+    staging: ["staging"]
+    production: ["production"]

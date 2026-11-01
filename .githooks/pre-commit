@@ -1,0 +1,3 @@
+#!/bin/sh
+# quality-gates spec 2.3: no secret in a staged file, then the project's precommit script.
+exec node .ai-orchestrator/scripts/pre-commit.mjs "$@"

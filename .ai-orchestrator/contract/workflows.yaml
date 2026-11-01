@@ -1,0 +1,206 @@
+# State machines for work items (spec section 2.4), with the guards and effects their transitions use.
+# Guards only name a condition and where its evidence comes from; the modules that use the contract check them.
+# States are listed in workflow order: a transition whose target comes before its source goes back (rework).
+workflows:
+  standard:
+    applies_to: [story, task, bug]
+    initial: new
+    final: [done, cancelled]
+    states:
+      new: { description: "Mới tạo, chưa đạt DoR", board_column: backlog }
+      ready: { description: "Đạt DoR, chờ được kéo", board_column: ready }
+      in-progress: { description: "Đang code và viết test", board_column: in-progress }
+      in-review: { description: "PR đã mở, CI xanh, đang review", board_column: in-review }
+      ready-for-qa: { description: "Đã merge và deploy lên môi trường QA", board_column: qa }
+      in-qa: { description: "QA đang kiểm", board_column: qa }
+      done: { description: "Đã verify, đạt DoD. Trạng thái kết thúc", board_column: done }
+      cancelled: { description: "Không làm nữa, có Resolution. Trạng thái kết thúc, ẩn khỏi board" }
+    transitions:
+      - id: refine
+        from: new
+        to: ready
+        actors: [automation, human]
+        guards: [dor-met]
+        note: "automation chuyển Story/Task thuộc Epic có plan đã duyệt; human chuyển Bug sau triage và Task không thuộc Epic"
+      - id: start
+        from: ready
+        to: in-progress
+        actors: [fe-dev, be-dev, devops]
+        guards: [wip-available, dependencies-merged, branch-created]
+      - id: submit
+        from: in-progress
+        to: in-review
+        actors: [automation]
+        guards: [subtasks-done, pr-open, ci-green]
+      - id: request-changes
+        from: in-review
+        to: in-progress
+        actors: [reviewer, security, human, automation]
+        guards: [changes-requested]
+        effects: [increment-rework]
+      - id: deploy-to-qa
+        from: in-review
+        to: ready-for-qa
+        actors: [automation]
+        guards: [merge-approved, pr-merged, qa-deployed]
+      - id: pick-up
+        from: ready-for-qa
+        to: in-qa
+        actors: [qa]
+      - id: qa-fail
+        from: in-qa
+        to: in-progress
+        actors: [qa]
+        guards: [qa-report-failed]
+        effects: [increment-rework]
+      - id: accept
+        from: in-qa
+        to: done
+        actors: [human]
+        guards: [qa-report-passed, dod-met]
+      - id: cancel
+        from: [new, ready, in-progress, in-review, ready-for-qa, in-qa]
+        to: cancelled
+        actors: [human]
+        guards: [resolution-set]
+
+  epic:
+    applies_to: [epic]
+    initial: new
+    final: [done, cancelled]
+    states:
+      new: {}
+      specifying: {}
+      planning: {}
+      in-progress: {}
+      done: {}
+      cancelled: {}
+    transitions:
+      - id: start-spec
+        from: new
+        to: specifying
+        actors: [human]
+        guards: [epic-wip-available]
+      - id: approve-spec
+        from: specifying
+        to: planning
+        actors: [human]
+        guards: [spec-approved]
+      - id: approve-plan
+        from: planning
+        to: in-progress
+        actors: [human]
+        guards: [plan-approved, children-created]
+        effects: [refine-children]
+      - id: complete
+        from: in-progress
+        to: done
+        actors: [human]
+        guards: [children-closed, children-released]
+      - id: cancel
+        from: [new, specifying, planning, in-progress]
+        to: cancelled
+        actors: [human]
+        guards: [resolution-set]
+
+  sub-task:
+    applies_to: [sub-task]
+    initial: to-do
+    final: [done]
+    states:
+      to-do: {}
+      in-progress: {}
+      done: {}
+    transitions:
+      - id: start
+        from: to-do
+        to: in-progress
+        actors: [fe-dev, be-dev]
+        guards: [wip-available]
+      - id: complete
+        from: in-progress
+        to: done
+        actors: [fe-dev, be-dev]
+        guards: [work-committed]
+
+guards:
+  dor-met:
+    description: "Item đạt DoR của loại đó (mục 2.5): Story/Task thuộc Epic có plan đã duyệt, Bug đã qua triage"
+    evidence: { source: tracker }
+  wip-available:
+    description: "Agent còn chỗ WIP: tính theo Sub-task nếu Story có Sub-task, nếu không thì theo cả item (mục 2.7)"
+    evidence: { source: tracker }
+  dependencies-merged:
+    description: "Các item phụ thuộc đã merge vào nhánh gốc"
+    evidence: { source: git }
+  branch-created:
+    description: "Đã tạo nhánh từ đúng nhánh gốc (mục 2.6), có trên GitHub"
+    evidence: { source: git }
+  subtasks-done:
+    description: "Mọi Sub-task của item đã done"
+    evidence: { source: tracker }
+  pr-open:
+    description: "PR vào đúng nhánh gốc đã mở"
+    evidence: { source: github-pr }
+  ci-green:
+    description: "Mọi check CI của PR xanh"
+    evidence: { source: ci }
+  changes-requested:
+    description: "Review trên PR yêu cầu sửa, hoặc CI của PR đỏ"
+    evidence: { source: github-pr }
+  merge-approved:
+    description: "Bạn đã approve PR ở cổng ③ merge-approval"
+    evidence: { source: github-pr }
+  pr-merged:
+    description: "PR đã merge vào nhánh gốc"
+    evidence: { source: github-pr }
+  qa-deployed:
+    description: "Deploy lên môi trường QA của item (mục 2.6) thành công"
+    evidence: { source: deploy }
+  qa-report-failed:
+    description: "Báo cáo QA mới nhất của item có kết quả FAIL"
+    evidence: { source: tracker, artifact: qa-report }
+  qa-report-passed:
+    description: "Báo cáo QA mới nhất của item có kết quả PASS"
+    evidence: { source: tracker, artifact: qa-report }
+  dod-met:
+    description: "Item đạt DoD của loại đó (mục 2.5)"
+    evidence: { source: human }
+  resolution-set:
+    description: "Item có Resolution: Won't do, Duplicate, Not a bug hoặc Cannot reproduce"
+    evidence: { source: tracker }
+  epic-wip-available:
+    description: "Còn chỗ WIP cho Epic ở specifying hoặc planning (mục 2.7)"
+    evidence: { source: tracker }
+  spec-approved:
+    description: "Bạn duyệt SPEC của Epic ở cổng ① spec-approval"
+    evidence: { source: human, artifact: spec }
+  plan-approved:
+    description: "Bạn duyệt plan của Epic ở cổng ② plan-approval"
+    evidence: { source: human, artifact: plan }
+  children-created:
+    description: "Các Story/Task con theo plan đã được tạo trên Jira"
+    evidence: { source: tracker }
+  children-closed:
+    description: "Mọi item con đã Done hoặc Cancelled"
+    evidence: { source: tracker }
+  children-released:
+    description: "Mọi item con đã Done nằm trong một bản đã lên Production"
+    evidence: { source: tracker }
+  work-committed:
+    description: "Phần việc của Sub-task đã được commit lên nhánh của Story"
+    evidence: { source: git }
+  cut-point-ready:
+    description: "Điểm cắt trên develop có ít nhất một item Done chưa release (mục 2.7)"
+    evidence: { source: git }
+  no-open-release:
+    description: "Không có nhánh release/* nào đang mở"
+    evidence: { source: git }
+
+effects:
+  increment-rework:
+    description: "Tăng Rework count của item lên 1"
+  flag-needs-you:
+    description: "Gắn cờ Needs you và dừng agent xử lý item; thêm vào khi Rework count chạm giới hạn"
+  refine-children:
+    description: "automation chuyển các Story/Task con đạt DoR sang ready"

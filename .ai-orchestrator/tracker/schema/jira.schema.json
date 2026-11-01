@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tracker/jira.yaml",
+  "description": "Mapping of the SDLC contract to Jira Cloud (tracker-integration spec sections 2.2 and 2.3).",
+  "type": "object",
+  "required": ["site", "cloud_id", "identities", "workflow_scheme", "workflows", "fields", "needs_you_label", "work_labels", "board", "environments"],
+  "additionalProperties": false,
+  "properties": {
+    "site": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+\\.atlassian\\.net$"
+    },
+    "cloud_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "identities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/identity" }
+    },
+    "workflow_scheme": { "$ref": "#/$defs/text" },
+    "workflows": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/workflow" }
+    },
+    "fields": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/field" }
+    },
+    "needs_you_label": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "work_labels": {
+      "type": "object",
+      "required": ["role_prefix", "effort_prefix"],
+      "additionalProperties": false,
+      "properties": {
+        "role_prefix": { "type": "string", "pattern": "^[a-z][a-z0-9]*-$" },
+        "effort_prefix": { "type": "string", "pattern": "^[a-z][a-z0-9-]*-$" }
+      }
+    },
+    "board": {
+      "type": "object",
+      "required": ["type", "filter", "columns"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "kanban" },
+        "filter": {
+          "type": "string",
+          "pattern": "\\{key\\}"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/column" }
+        }
+      }
+    },
+    "environments": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/environment" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "identity": {
+      "type": "object",
+      "required": ["id", "kind", "account", "group", "roles"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["user", "service-account"] },
+        "account": { "$ref": "#/$defs/text" },
+        "account_id": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z:-]{10,128}$"
+        },
+        "group": { "$ref": "#/$defs/id" },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "token_env": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "token_expires_on": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "note": { "$ref": "#/$defs/text" }
+      },
+      "if": { "properties": { "kind": { "const": "service-account" } } },
+      "then": { "required": ["token_env", "token_expires_on"] }
+    },
+    "workflow": {
+      "type": "object",
+      "required": ["jira_workflow", "states", "transitions"],
+      "additionalProperties": false,
+      "properties": {
+        "jira_workflow": { "$ref": "#/$defs/text" },
+        "on_board": { "type": "boolean" },
+        "board_columns": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/id" }
+        },
+        "states": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/status" }
+        },
+        "transitions": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/transition" }
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "required": ["status", "category"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "#/$defs/text" },
+        "category": { "enum": ["to-do", "in-progress", "done"] }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/text" },
+        "set_resolution": { "$ref": "#/$defs/text" },
+        "screen": { "const": "resolution" }
+      }
+    },
+    "field": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["jira_field", "type"],
+          "additionalProperties": false,
+          "properties": {
+            "jira_field": { "$ref": "#/$defs/text" },
+            "type": { "enum": ["select", "builtin"] },
+            "values": {
+              "type": "object",
+              "propertyNames": { "$ref": "#/$defs/id" },
+              "additionalProperties": { "$ref": "#/$defs/text" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["derived_from"],
+          "additionalProperties": false,
+          "properties": {
+            "derived_from": { "const": "changelog" }
+          }
+        }
+      ]
+    },
+    "column": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "wip_limit": { "$ref": "#/$defs/id" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["github_environment", "jira_type"],
+      "additionalProperties": false,
+      "properties": {
+        "github_environment": { "$ref": "#/$defs/text" },
+        "jira_type": { "enum": ["development", "testing", "staging", "production", "unmapped"] }
+      }
+    }
+  }
+}

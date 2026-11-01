@@ -1,0 +1,6 @@
+# Stack skills of ao-sample (agent-roster spec 2.7, SPEC-pilot-1.md 2.2). Each skill sits in .claude/skills/ with its SOURCE.md.
+roles:
+  fe-dev:
+    skills: [vercel-react-best-practices]
+  be-dev:
+    skills: [nestjs-best-practices]

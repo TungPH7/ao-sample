@@ -1,0 +1,35 @@
+{
+  "attribution": { "commit": "", "pr": "" },
+  "permissions": { "allow": ["Bash(node .ai-orchestrator/scripts/ao-step.mjs:*)"] },
+  "env": {
+    "AO_JIRA_SPACE": "SMP",
+    "AO_APPROVERS": "TungPH7",
+    "AO_DEV_APP": "tungph7-ao-dev",
+    "AO_DEV_APP_ID": "5514949",
+    "AO_REVIEW_APP": "tungph7-ao-review",
+    "AO_REVIEW_APP_ID": "5514961",
+    "NO_UPDATE_NOTIFIER": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__atlassian__transitionJiraIssue",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/jira-guard.mjs\"" }]
+      },
+      {
+        "matcher": "Bash|mcp__.*",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-atlassian.mjs\"" }]
+      },
+      {
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/gh-guard.mjs\"" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__atlassian__transitionJiraIssue",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/jira-rework.mjs\"" }]
+      }
+    ]
+  }
+}

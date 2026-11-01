@@ -1,0 +1,61 @@
+# Base branches and QA environments for new work and bugs, and version numbering (spec section 2.6).
+# Environment ids (development, staging, production) are declared with the environments in stages.yaml.
+
+new_work_route:
+  applies_to: [story, task]
+  base_branch: develop
+  qa_environments: [development]
+
+# routeBug returns these ids; release-workflow turns them into real version numbers.
+fix_versions:
+  patch-of-production: "Bản vá của bản đang chạy trên Production"
+  current-release: "Bản đang ở Staging"
+  next-release: "Bản kế tiếp"
+
+# One entry per location of the oldest version that has the bug. Severity ids come from the Severity field
+# in work-items.yaml; each location × severity has exactly one route (rule R6).
+bug_routing:
+  - id: production
+    name: "Production"
+    routes:
+      - severities: [critical, high]
+        fix_version: patch-of-production
+        base_branch: main
+        qa_environments: [staging, production]
+        note: "Nhánh hotfix/... tách từ main. QA trên Staging, rồi smoke test trên Production"
+      - severities: [medium, low]
+        fix_version: next-release
+        base_branch: develop
+        qa_environments: [development]
+  - id: staging
+    name: "Staging, chưa lên Production"
+    routes:
+      - severities: [critical, high]
+        fix_version: current-release
+        base_branch: "release/*"
+        qa_environments: [staging]
+      - severities: [medium, low]
+        fix_version: next-release
+        base_branch: develop
+        qa_environments: [development]
+        note: "Ghi known issue vào release note"
+  - id: development
+    name: "Chỉ có trên develop"
+    routes:
+      - severities: [critical, high, medium, low]
+        fix_version: next-release
+        base_branch: develop
+        qa_environments: [development]
+
+bug_rules:
+  - "Bug được sửa trên nhánh cũ nhất còn cần bản sửa, rồi merge ngược về các nhánh mới hơn."
+  - "Lỗi Critical/High được chen vào luồng ngay; lỗi Medium/Low vào Product Backlog để bạn xếp thứ tự."
+  - "Nhánh release/* và hotfix/* khi kết thúc đều được merge vào main và merge ngược về develop; hotfix làm lúc đang có nhánh release mở thì được merge thêm vào nhánh release đó."
+  - "Lỗi tìm thấy khi QA một item chưa Done thì không tạo Bug: item quay lại in-progress qua qa-fail, và được sửa trên nhánh mới tách từ nhánh gốc cũ, vẫn mang mã item cũ."
+
+versioning:
+  scheme: "SemVer"
+  bumps:
+    - { part: minor, when: "Mỗi bản release", example: "v1.4.0 → v1.5.0" }
+    - { part: patch, when: "Hotfix", example: "v1.4.0 → v1.4.1" }
+    - { part: major, when: "Thay đổi phá vỡ tương thích, do bạn quyết" }

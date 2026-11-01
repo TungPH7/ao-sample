@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "routing.yaml",
+  "description": "Base branches and QA environments for new work and bugs, and version numbering (spec section 2.6).",
+  "type": "object",
+  "required": ["new_work_route", "fix_versions", "bug_routing", "bug_rules", "versioning"],
+  "additionalProperties": false,
+  "properties": {
+    "new_work_route": {
+      "type": "object",
+      "required": ["applies_to", "base_branch", "qa_environments"],
+      "additionalProperties": false,
+      "properties": {
+        "applies_to": { "$ref": "#/$defs/ids" },
+        "base_branch": { "$ref": "#/$defs/branch" },
+        "qa_environments": { "$ref": "#/$defs/ids" }
+      }
+    },
+    "fix_versions": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/text" }
+    },
+    "bug_routing": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/location" }
+    },
+    "bug_rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "versioning": {
+      "type": "object",
+      "required": ["scheme", "bumps"],
+      "additionalProperties": false,
+      "properties": {
+        "scheme": { "$ref": "#/$defs/text" },
+        "bumps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/bump" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "branch": { "enum": ["main", "develop", "release/*"] },
+    "location": {
+      "type": "object",
+      "required": ["id", "name", "routes"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "routes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/route" }
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "required": ["severities", "fix_version", "base_branch", "qa_environments"],
+      "additionalProperties": false,
+      "properties": {
+        "severities": { "$ref": "#/$defs/ids" },
+        "fix_version": { "$ref": "#/$defs/id" },
+        "base_branch": { "$ref": "#/$defs/branch" },
+        "qa_environments": { "$ref": "#/$defs/ids" },
+        "note": { "$ref": "#/$defs/text" }
+      }
+    },
+    "bump": {
+      "type": "object",
+      "required": ["part", "when"],
+      "additionalProperties": false,
+      "properties": {
+        "part": { "enum": ["major", "minor", "patch"] },
+        "when": { "$ref": "#/$defs/text" },
+        "example": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

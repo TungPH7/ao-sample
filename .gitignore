@@ -1,0 +1,15 @@
+node_modules/
+coverage/
+dist/
+*.tsbuildinfo
+.env*
+
+# Playwright
+test-results/
+playwright-report/
+.playwright-cli/
+
+# ai-orchestrator: the kit's dependencies, your local Claude Code settings, and the agents' ledgers, reports and runs
+.ai-orchestrator/node_modules/
+.claude/settings.local.json
+.ai/

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "work-items.yaml",
+  "description": "Work item types, their Jira mapping, conventions, fields, DoR and DoD (spec sections 2.3 and 2.5).",
+  "type": "object",
+  "required": ["work_item_groupings", "work_types", "work_type_selection", "work_item_conventions", "work_item_fields", "dod_common"],
+  "additionalProperties": false,
+  "properties": {
+    "work_item_groupings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/grouping" }
+    },
+    "work_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/work_type" }
+    },
+    "work_type_selection": { "$ref": "#/$defs/text" },
+    "work_item_conventions": { "$ref": "#/$defs/texts" },
+    "work_item_fields": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/field" }
+    },
+    "dod_common": {
+      "type": "object",
+      "required": ["applies_to", "criteria"],
+      "additionalProperties": false,
+      "properties": {
+        "applies_to": { "$ref": "#/$defs/ids" },
+        "criteria": { "$ref": "#/$defs/texts" }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "texts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "grouping": {
+      "type": "object",
+      "required": ["concept", "jira", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "concept": { "$ref": "#/$defs/text" },
+        "jira": { "$ref": "#/$defs/text" },
+        "note": { "$ref": "#/$defs/text" }
+      }
+    },
+    "work_type": {
+      "type": "object",
+      "required": ["id", "concept", "jira_issue_type", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "concept": { "$ref": "#/$defs/text" },
+        "jira_issue_type": { "$ref": "#/$defs/text" },
+        "note": { "$ref": "#/$defs/text" },
+        "dor": { "$ref": "#/$defs/texts" },
+        "dod": { "$ref": "#/$defs/texts" }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["id", "name", "applies_to", "filled_by"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "applies_to": { "$ref": "#/$defs/ids" },
+        "value": { "$ref": "#/$defs/text" },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/field_value" }
+        },
+        "filled_by": { "$ref": "#/$defs/text" },
+        "note": { "$ref": "#/$defs/text" }
+      },
+      "oneOf": [{ "required": ["value"] }, { "required": ["values"] }]
+    },
+    "field_value": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

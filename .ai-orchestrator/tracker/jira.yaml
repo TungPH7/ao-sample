@@ -1,0 +1,133 @@
+# Mapping of the SDLC contract to Jira Cloud on the Free plan (tracker-integration spec sections 2.2 and 2.3).
+# Ids come from the contract; names are what you see on Jira. Rules J1–J4 check this file (spec section 7).
+# Tokens are never written here: an identity only names the environment variable that holds its token.
+site: phunghuutung12b4.atlassian.net
+cloud_id: 58b36210-6e4d-421a-adf4-e74a4e23b069
+
+# Each contract role belongs to exactly one identity (rule J4); the group is what the Restrict rules name. account_id is
+# the Atlassian account id, not a secret (it is in the URL of the profile): merge-gate and jira-sync count only the
+# comments of the automation account as the kit's.
+identities:
+  - id: human
+    kind: user
+    account: site-admin
+    group: ao-humans
+    roles: [human]
+    note: "Tài khoản Atlassian của bạn, admin của site"
+  - id: agents
+    kind: service-account
+    account: orchestratoragent
+    account_id: "712020:3c1a9503-577b-49c6-a70e-033f740c1f31"
+    group: ao-agents
+    roles: [pm, ba, ux, sa, fe-dev, be-dev, reviewer, security, qa, devops]
+    token_env: ATLASSIAN_AGENT_TOKEN
+    token_expires_on: "2027-10-27"
+    note: "Mọi agent trong Claude Code, qua Rovo MCP; vai trò cụ thể do hook kiểm"
+  - id: automation
+    kind: service-account
+    account: orchestratorci
+    account_id: "712020:14a4a21d-167e-4ee7-87cb-386edf298b62"
+    group: ao-automation
+    roles: [automation]
+    token_env: JIRA_CI_TOKEN
+    token_expires_on: "2027-10-27"
+    note: "Vai trò automation, chạy jira-sync trong GitHub Actions"
+
+# One Jira workflow per contract workflow, all in one workflow scheme. Status names are the state ids in title case,
+# transition names the transition ids in sentence case (rule J3 keeps them unique). Jira statuses are shared across
+# workflows, so a status keeps one category everywhere. A transition with several `from` (cancel) becomes one Jira
+# transition per `from`, all with the same name.
+workflow_scheme: "AO workflow scheme"
+workflows:
+  standard:
+    jira_workflow: "AO standard"
+    states:
+      new: { status: "New", category: to-do }
+      ready: { status: "Ready", category: to-do }
+      in-progress: { status: "In Progress", category: in-progress }
+      in-review: { status: "In Review", category: in-progress }
+      ready-for-qa: { status: "Ready for QA", category: in-progress }
+      in-qa: { status: "In QA", category: in-progress }
+      done: { status: "Done", category: done }
+      cancelled: { status: "Cancelled", category: done }
+    transitions:
+      refine: { name: "Refine" }
+      start: { name: "Start" }
+      submit: { name: "Submit" }
+      request-changes: { name: "Request changes" }
+      deploy-to-qa: { name: "Deploy to QA" }
+      pick-up: { name: "Pick up" }
+      qa-fail: { name: "QA fail" }
+      accept: { name: "Accept", set_resolution: "Done" }
+      cancel: { name: "Cancel", screen: resolution }
+  epic:
+    jira_workflow: "AO epic"
+    on_board: false
+    states:
+      new: { status: "New", category: to-do }
+      specifying: { status: "Specifying", category: to-do }
+      planning: { status: "Planning", category: to-do }
+      in-progress: { status: "In Progress", category: in-progress }
+      done: { status: "Done", category: done }
+      cancelled: { status: "Cancelled", category: done }
+    transitions:
+      start-spec: { name: "Start spec" }
+      approve-spec: { name: "Approve spec" }
+      approve-plan: { name: "Approve plan" }
+      complete: { name: "Complete", set_resolution: "Done" }
+      cancel: { name: "Cancel", screen: resolution }
+  sub-task:
+    jira_workflow: "AO sub-task"
+    # The contract gives Sub-task states no board column; they sit next to their Story.
+    board_columns: { to-do: ready, in-progress: in-progress, done: done }
+    states:
+      to-do: { status: "To Do", category: to-do }
+      in-progress: { status: "In Progress", category: in-progress }
+      done: { status: "Done", category: done }
+    transitions:
+      start: { name: "Start" }
+      complete: { name: "Complete", set_resolution: "Done" }
+
+# select: a single-select custom field whose options are the contract values; builtin: a field Jira already has.
+# `values` gives the Jira name of a value when it differs from the contract name.
+fields:
+  found-in: { jira_field: "Found in", type: select }
+  affects-version: { jira_field: "Affects versions", type: builtin }
+  severity: { jira_field: "Severity", type: select }
+  fix-version: { jira_field: "Fix versions", type: builtin }
+  agent: { jira_field: "Agent", type: select }
+  rework-count: { derived_from: changelog }
+  flagged: { jira_field: "Flagged", type: builtin }
+  resolution:
+    jira_field: "Resolution"
+    type: builtin
+    values: { wont-do: "Won't Do", duplicate: "Duplicate", not-a-bug: "Not a bug", cannot-reproduce: "Cannot Reproduce" }
+
+# flag-needs-you sets Flagged, adds this label and comments the reason (spec 2.3).
+needs_you_label: needs-you
+
+# Labels ba puts on an item it creates (dev-workflow spec 2.5): the dev agent that builds it, such as ao-fe-dev, and the
+# effort of a hard item, such as ao-effort-xhigh, which you approve with the plan. /ao-build reads them.
+work_labels:
+  role_prefix: ao-
+  effort_prefix: ao-effort-
+
+# One Kanban board per space. Columns follow the board_column of the contract states; the first is the Kanban backlog.
+# `{key}` is the space key. Cancelled items have no column, so they leave the board.
+board:
+  type: kanban
+  filter: "project = {key} AND issuetype != Epic ORDER BY Rank ASC"
+  columns:
+    - { id: backlog, name: "Backlog" }
+    - { id: ready, name: "Ready" }
+    - { id: in-progress, name: "In Progress" }
+    - { id: in-review, name: "In Review", wip_limit: in-review }
+    - { id: qa, name: "QA" }
+    - { id: done, name: "Done" }
+
+# The GitHub environment each contract environment deploys to, and the Jira environment type for the Deployments
+# panel; .jira/config.yml is built from this (spec 2.9).
+environments:
+  development: { github_environment: development, jira_type: development }
+  staging: { github_environment: staging, jira_type: staging }
+  production: { github_environment: production, jira_type: production }

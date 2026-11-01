@@ -1,0 +1,144 @@
+# Work items (spec sections 2.3 and 2.5): the types and their Jira mapping, how to pick a type,
+# branch and PR conventions, fields, and the Definitions of Ready and Done.
+
+# Levels above work items: they only group, and have no workflow.
+work_item_groupings:
+  - concept: "Project"
+    jira: "Space"
+    note: "Mỗi sản phẩm một space"
+  - concept: "Epic (mục tiêu lớn)"
+    jira: "Label hoặc Component"
+    note: "Chỉ để nhóm, không có workflow"
+
+# Each work type follows exactly one workflow (rule R8). dod adds to dod_common when the type is listed there.
+work_types:
+  - id: epic
+    concept: "Feature"
+    jira_issue_type: "Epic"
+    note: "Có SPEC và plan, kéo dài 1–3 tuần"
+    dod:
+      - "Mọi item con đã Done hoặc Cancelled"
+      - "Bản chứa các item con đã lên Production"
+  - id: story
+    concept: "User Story"
+    jira_issue_type: "Story"
+    note: "Đơn vị để QA và Done; tốt nhất làm xong trong 1–2 ngày"
+    dor:
+      - "Có câu user story"
+      - "Có acceptance criteria dạng Given/When/Then, mỗi tiêu chí kiểm thử được"
+      - "Thuộc Epic có plan đã duyệt"
+      - "Đã xác định item phụ thuộc"
+      - "Vừa cỡ: mỗi Sub-task, hoặc cả Story nếu không có Sub-task, khoảng 5 file code trở xuống, không tính file test"
+      - "Có hợp đồng API trong plan nếu Story có cả FE và BE"
+      - "Có thiết kế màn hình nếu đụng tới giao diện"
+    dod:
+      - "E2E test cho từng acceptance criterion đều pass"
+  - id: sub-task
+    concept: "Task (con của Story)"
+    jira_issue_type: "Sub-task"
+    note: "Chỉ dùng khi một Story phải chia cho nhiều agent"
+  - id: task
+    concept: "Task độc lập"
+    jira_issue_type: "Task"
+    note: "Cùng cấp Story. Việc kỹ thuật không trực tiếp mang giá trị cho người dùng"
+    dor:
+      - "Có mục tiêu và checklist kỹ thuật kiểm tra được"
+      - "Thuộc Epic có plan đã duyệt, hoặc được bạn duyệt trực tiếp"
+    dod:
+      - "Bộ regression pass"
+  - id: bug
+    concept: "Bug"
+    jira_issue_type: "Bug"
+    note: "Cùng cấp Story. Link tới Story hoặc Epic liên quan"
+    dor:
+      - "Có bước tái hiện, kết quả thực tế và kết quả mong đợi"
+      - "Đã điền Found in, Affects Version, Severity, Fix Version"
+      - "Có bằng chứng (log, ảnh)"
+    dod:
+      - "Có test tái hiện lỗi (fail trước khi sửa, pass sau khi sửa), được đưa vào bộ regression"
+
+work_type_selection: "Người dùng cuối có nhìn thấy hoặc kiểm chứng được kết quả không? Có thì là Story, không thì là Task. Hành vi hiện có sai so với yêu cầu đã có thì là Bug."
+
+work_item_conventions:
+  - "Mỗi Story, Task, Bug có một nhánh và một PR, chứa mọi phần nó cần: FE, BE, migration, test. Item quay lại sau qa-fail thì được sửa trên nhánh và PR mới, vẫn mang mã item (mục 2.6). Tại mỗi thời điểm, một item có tối đa một PR đang mở."
+  - "Story có cả FE và BE được chia thành Sub-task FE và Sub-task BE. Hai agent commit lên cùng nhánh của Story, BE làm trước; PR chỉ được mở khi mọi Sub-task đã xong."
+  - "Story quá lớn thì tách theo chiều dọc thành nhiều Story nhỏ, mỗi Story vẫn đủ FE và BE."
+  - "Phần kỹ thuật của một tính năng thuộc về chính Story đó, không tách thành Task theo lớp (BE, FE). Ngoại lệ duy nhất là phần nền dùng chung cho nhiều Story, như module auth hay schema của cả Epic: phần này là Task độc lập, làm trước, và các Story khai báo phụ thuộc vào nó."
+  - "PR của một Task mà làm đổi giao diện hoặc API công khai thì reviewer yêu cầu đổi Task thành Story."
+
+# A field has either a free-text value or a list of values.
+work_item_fields:
+  - id: found-in
+    name: "Found in"
+    applies_to: [bug]
+    values:
+      - { id: development, name: "Development" }
+      - { id: staging, name: "Staging" }
+      - { id: production, name: "Production" }
+    filled_by: "Người báo lỗi"
+  - id: affects-version
+    name: "Affects Version"
+    applies_to: [bug]
+    value: "Bản cũ nhất đang có lỗi"
+    filled_by: "ba đề xuất, bạn duyệt"
+  - id: severity
+    name: "Severity"
+    applies_to: [bug]
+    values:
+      - { id: critical, name: "Critical", description: "Mất hoặc sai dữ liệu, lỗ hổng bảo mật, hệ thống hoặc luồng thanh toán ngừng" }
+      - { id: high, name: "High", description: "Luồng chính hỏng, không có cách né" }
+      - { id: medium, name: "Medium", description: "Có cách né" }
+      - { id: low, name: "Low", description: "Giao diện, chính tả" }
+    filled_by: "ba đề xuất, bạn duyệt"
+  - id: fix-version
+    name: "Fix Version"
+    applies_to: [story, task, bug]
+    value: "Bug: suy ra từ bảng định tuyến (mục 2.6). Story, Task: gắn khi cắt release"
+    filled_by: "automation, devops"
+  - id: agent
+    name: "Agent"
+    applies_to: [story, sub-task, task, bug]
+    values:
+      - { id: pm, name: "Project Manager" }
+      - { id: ba, name: "Business Analyst" }
+      - { id: ux, name: "UI/UX designer" }
+      - { id: sa, name: "Solution Architect" }
+      - { id: fe-dev, name: "Frontend Developer" }
+      - { id: be-dev, name: "Backend Developer" }
+      - { id: reviewer, name: "Code Reviewer" }
+      - { id: security, name: "Security Engineer" }
+      - { id: qa, name: "Tester/QA Engineer" }
+      - { id: devops, name: "DevOps Engineer" }
+    filled_by: "Agent, khi start và pick-up"
+    note: "Vai trò agent đang giữ item. Mọi agent dùng chung một tài khoản Jira, nên assignee không cho biết agent nào; guard wip-available đếm WIP theo trường này"
+  - id: rework-count
+    name: "Rework count"
+    applies_to: [story, task, bug]
+    value: "Số lần quay lại in-progress"
+    filled_by: "Không ai điền: tự tính từ lịch sử"
+    note: "Không lưu thành trường: là số transition có effect increment-rework trong lịch sử chuyển trạng thái của item"
+  - id: flagged
+    name: "Flagged"
+    applies_to: [epic, story, sub-task, task, bug]
+    value: "Lý do bị chặn hoặc cần bạn quyết"
+    filled_by: "Bất kỳ ai"
+  - id: resolution
+    name: "Resolution"
+    applies_to: [epic, story, task, bug]
+    values:
+      - { id: wont-do, name: "Won't do" }
+      - { id: duplicate, name: "Duplicate" }
+      - { id: not-a-bug, name: "Not a bug" }
+      - { id: cannot-reproduce, name: "Cannot reproduce" }
+    filled_by: "Bạn"
+    note: "Điền khi item chuyển sang cancelled"
+
+dod_common:
+  applies_to: [story, task, bug]
+  criteria:
+    - "PR đã merge vào đúng nhánh gốc, mọi check CI xanh"
+    - "Không còn finding Critical/High chưa xử lý"
+    - "Hành vi mới hoặc thay đổi được phủ bởi unit và integration test viết theo TDD"
+    - "Báo cáo QA PASS trên đúng môi trường QA"
+    - "Đã cập nhật tài liệu, và ADR nếu có thay đổi kiến trúc"
+    - "Bạn đã chấp nhận"

@@ -1,0 +1,158 @@
+# Stages, approval gates, environments, the working cadence and the release rules (spec sections 2.2, 2.6 and 2.7).
+
+# Only `human` approves a gate (rule R4).
+gates:
+  - id: spec-approval
+    number: 1
+    approvers: [human]
+    description: "Bạn duyệt SPEC của Epic"
+  - id: plan-approval
+    number: 2
+    approvers: [human]
+    description: "Bạn duyệt plan của Epic"
+  - id: merge-approval
+    number: 3
+    approvers: [human]
+    description: "Bạn approve PR"
+  - id: release-cut-approval
+    number: 4
+    approvers: [human]
+    description: "Bạn duyệt danh sách item của bản"
+  - id: production-approval
+    number: 5
+    approvers: [human]
+    description: "Bạn duyệt lên Production"
+
+# roles: who works in the stage; lead: the main role when the spec names one.
+# outputs.artifacts are ids from the artifact catalog in policies.yaml; outputs.other describes the rest.
+# A stage is passed by its exit condition, its gate, or both.
+stages:
+  - id: spec
+    name: "Viết SPEC cho Epic"
+    roles: [ba, ux, sa]
+    lead: ba
+    note: "ux viết design khi Epic đụng tới giao diện"
+    input: "Epic ở new"
+    outputs:
+      artifacts: [spec, design]
+      other: "PR tài liệu của Epic vào develop, từ nhánh feature/<EPIC-KEY>-spec; bạn đọc diff của nó trước cổng ①"
+    gate: spec-approval
+  - id: plan
+    name: "Lập plan, tạo Story/Task"
+    roles: [sa, ba]
+    lead: sa
+    input: "SPEC đã duyệt"
+    outputs:
+      artifacts: [plan, story, task]
+      other: "Plan gồm hợp đồng API cho Story có cả FE và BE, vai trò của từng item và effort của item khó; các Story/Task nằm trên Jira. Plan và ADR vào cùng PR tài liệu, và merge-gate merge PR đó sau cổng ② mà không cần review hay approve trên GitHub"
+    gate: plan-approval
+  - id: build
+    name: "Code theo TDD"
+    roles: [fe-dev, be-dev]
+    input: "Item ready"
+    outputs:
+      other: "Nhánh, commit, test"
+    exit: "Unit và integration test pass ở local; pre-commit pass"
+  - id: ci-gate
+    name: "Quality gate tự động"
+    roles: [automation]
+    input: "PR"
+    outputs:
+      other: "Kết quả CI"
+    exit: "Mọi check CI xanh"
+  - id: review
+    name: "Review code và security"
+    roles: [reviewer, security, human]
+    note: "human duyệt sau reviewer và security"
+    input: "PR có CI xanh"
+    outputs:
+      artifacts: [review-report]
+    exit: "Không còn finding Critical/High"
+    gate: merge-approval
+  - id: merge
+    name: "Merge PR"
+    roles: [automation]
+    input: "PR đã approve"
+    outputs:
+      other: "Commit trên nhánh đích"
+    exit: "merge-gate pass"
+  - id: qa-verify
+    name: "QA trên môi trường kiểm"
+    roles: [qa]
+    input: "Bản đã deploy lên môi trường QA (mục 2.6)"
+    outputs:
+      artifacts: [qa-report]
+    exit: "Báo cáo PASS; bạn chấp nhận"
+  - id: release-cut
+    name: "Cắt release lên Staging, khi bạn yêu cầu"
+    roles: [devops]
+    input: "Điểm cắt trên develop có ít nhất một item Done chưa release; không có nhánh release/* nào đang mở (mục 2.7)"
+    guards: [cut-point-ready, no-open-release]
+    outputs:
+      other: "Nhánh release/vX.Y.0 tách từ điểm cắt, Fix Version"
+    gate: release-cut-approval
+  - id: staging-verify
+    name: "Full regression, demo, UAT"
+    roles: [qa, human]
+    input: "Bản release trên Staging"
+    outputs:
+      artifacts: [regression-report, release-notes]
+    exit: "Regression PASS; không còn Bug Critical/High mở cho bản này"
+  - id: ship
+    name: "Lên Production"
+    roles: [devops]
+    input: "Bản đã qua Staging"
+    outputs:
+      other: "Merge vào main, tag vX.Y.Z, merge ngược về develop"
+    exit: "Smoke test sau deploy pass"
+    gate: production-approval
+  - id: hotfix
+    name: "Sửa gấp trên Production"
+    roles: [fe-dev, be-dev, qa, devops]
+    note: "fe-dev hoặc be-dev sửa"
+    input: "Bug Critical/High trên Production"
+    outputs:
+      other: "Nhánh hotfix/..., tag bản vá"
+    exit: "Như ship, rút gọn"
+
+environments:
+  - id: development
+    name: "Development"
+    branches: [develop]
+    deploy: "Tự động mỗi khi develop có commit mới"
+    data: "Dữ liệu test"
+  - id: staging
+    name: "Staging"
+    branches: ["release/*", "hotfix/*"]
+    deploy: "Khi nhánh release hoặc hotfix có commit mới"
+    data: "Giống production, đã ẩn danh"
+  - id: production
+    name: "Production"
+    branches: [main]
+    tagged: true
+    deploy: "Sau cổng ⑤"
+    data: "Thật"
+
+cadence:
+  method: "Quy trình chạy theo Kanban: agent kéo item ready kế tiếp khi còn chỗ WIP. Không có sprint, story point hay Daily Scrum."
+  schedule:
+    - when: "Thứ 2"
+      what: "Bạn sắp lại thứ tự Product Backlog và duyệt các SPEC, plan đang chờ"
+      gates: [spec-approval, plan-approval]
+    - when: "Hằng ngày"
+      what: "pm gửi bản tổng hợp từ Jira và GitHub: việc đang chờ bạn, các item đã Done nhưng chưa release, và item Done đã chờ release lâu nhất"
+    - when: "Khi bạn quyết định"
+      what: "release-cut lên Staging; full regression, demo và UAT trên Staging; rồi ship"
+      gates: [release-cut-approval, production-approval]
+    - when: "Thứ 6"
+      what: "Retro dựa trên số liệu của tuần"
+
+release_rules:
+  - title: "Release theo quyết định của bạn, không theo lịch cố định"
+    text: "Bạn cắt release khi thấy đủ giá trị để đưa lên, ví dụ khi mọi Story của một Epic đã Done, hoặc khi khách cần sớm một tính năng. Lúc lên Production cũng do bạn quyết ở cổng ⑤."
+  - title: "Điểm cắt"
+    text: "develop nhận merge liên tục, nên lúc bạn muốn release thường vẫn còn item đã merge nhưng chưa Done. Vì vậy nhánh release tách từ điểm cắt, không từ commit mới nhất của develop. Điểm cắt là commit mới nhất trên lịch sử develop sao cho mọi item có commit tính tới điểm đó đều đã Done, và không item nào trong số đó còn commit nằm sau điểm cắt. Item nằm sau điểm cắt vào bản kế tiếp. release-workflow tính điểm cắt và đưa bạn danh sách item để duyệt ở cổng ④."
+  - title: "Mỗi lúc chỉ có một nhánh release/* mở"
+    text: "Muốn cắt bản mới thì bản đang ở Staging phải lên Production xong trước."
+  - title: "Fix Version"
+    text: "Luôn có sẵn một Fix Version chưa phát hành làm \"bản kế tiếp\", vì Bug Medium/Low được gắn vào đó ngay khi triage (mục 2.6). Khi cắt release, Fix Version này được gán cho các item trong điểm cắt; item nằm sau điểm cắt chuyển sang một Fix Version kế tiếp mới. Mô tả Fix Version ghi mục tiêu của bản để báo khách; mục tiêu là dự báo, không phải cam kết."

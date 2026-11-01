@@ -1,0 +1,39 @@
+# Roles in the SDLC (spec section 2.1). Only `human` passes approval gates and moves Story, Task, Bug and Epic to done.
+# Agent details (prompt, tools, model) belong to the agent-roster module.
+roles:
+  - id: human
+    name: "Bạn: Product Owner, người điều phối, người duyệt duy nhất"
+    responsibilities: "Qua 5 cổng duyệt, triage bug, chuyển item sang Done"
+  - id: pm
+    name: "Project Manager"
+    responsibilities: "Bản tổng hợp mỗi sáng, số liệu tuần cho retro"
+  - id: ba
+    name: "Business Analyst"
+    responsibilities: "SPEC, user story, acceptance criteria, đề xuất triage bug"
+  - id: ux
+    name: "UI/UX designer"
+    responsibilities: "Luồng màn hình, wireframe"
+  - id: sa
+    name: "Solution Architect"
+    responsibilities: "Yêu cầu phi chức năng, plan, ADR, thiết kế DB"
+  - id: fe-dev
+    name: "Frontend Developer"
+    responsibilities: "Code Next.js theo TDD"
+  - id: be-dev
+    name: "Backend Developer"
+    responsibilities: "Code NestJS và migration theo TDD"
+  - id: reviewer
+    name: "Code Reviewer"
+    responsibilities: "Review code, chặn Task trá hình"
+  - id: security
+    name: "Security Engineer"
+    responsibilities: "Security review, threat model"
+  - id: qa
+    name: "Tester/QA Engineer"
+    responsibilities: "E2E, regression, báo cáo QA"
+  - id: devops
+    name: "DevOps Engineer"
+    responsibilities: "Deploy, cắt release, ship, rollback"
+  - id: automation
+    name: "CI, webhook, Jira Automation"
+    responsibilities: "Chuyển trạng thái theo dữ kiện: CI xanh, merge, deploy xong"

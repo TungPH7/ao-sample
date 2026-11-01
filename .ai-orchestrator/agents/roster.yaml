@@ -1,0 +1,152 @@
+# The agent roles of the contract (agent-roster spec sections 2.1 to 2.3, 2.7 and 6). scripts/render-agents.mjs turns
+# each role into .claude/agents/<role>.md, with agents/prompts/<role>.md and the contract. Rules A1 to A5 of
+# `npm run validate` check this file. Changing a model, an effort or a skill is your decision (spec section 8).
+
+# Rovo MCP tools behind each Jira permission. executeWrite and executeDestructive go around the transition hook, so
+# no permission grants them.
+jira_tools:
+  read: [getJiraIssue, searchJiraIssuesUsingJql, executeRead]
+  create: [createJiraIssue]
+  edit: [editJiraIssue]
+  comment: [addOrEditJiraIssueComment]
+  transition: [transitionJiraIssue]
+
+# MCP tools an agent may get, by server and group. Chrome DevTools MCP 1.12.0, from its tool reference (T2). The
+# memory, extensions, third-party, WebMCP and PWA groups are left out on purpose; click_at needs --experimentalVision.
+mcp_tools:
+  chrome-devtools:
+    navigation: [close_page, list_pages, navigate_page, new_page, select_page, wait_for]
+    input: [click, drag, fill, fill_form, handle_dialog, hover, press_key, type_text, upload_file]
+    emulation: [emulate, resize_page]
+    debugging: [evaluate_script, get_console_message, get_css_styles, lighthouse_audit, list_console_messages, screencast_start, screencast_stop, take_screenshot, take_snapshot]
+    network: [get_network_request, list_network_requests]
+    performance: [performance_analyze_insight, performance_start_trace, performance_stop_trace]
+
+# Skills copied into kit/.claude/skills/ by `npm run skills:vendor`, pinned by full commit. agent-skills is pinned at
+# its 0.6.13 tag; the registry skills at the last commit that changed their folder by 2026-10-30. upstream_name is
+# set when the kit renames a skill.
+vendored_skills:
+  - { name: spec-driven-development, repo: addyosmani/agent-skills, path: skills/spec-driven-development, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: interview-me, repo: addyosmani/agent-skills, path: skills/interview-me, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: frontend-ui-engineering, repo: addyosmani/agent-skills, path: skills/frontend-ui-engineering, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: planning-and-task-breakdown, repo: addyosmani/agent-skills, path: skills/planning-and-task-breakdown, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: api-and-interface-design, repo: addyosmani/agent-skills, path: skills/api-and-interface-design, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: documentation-and-adrs, repo: addyosmani/agent-skills, path: skills/documentation-and-adrs, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: test-driven-development, repo: addyosmani/agent-skills, path: skills/test-driven-development, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: incremental-implementation, repo: addyosmani/agent-skills, path: skills/incremental-implementation, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: browser-testing-with-devtools, repo: addyosmani/agent-skills, path: skills/browser-testing-with-devtools, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: code-review-and-quality, repo: addyosmani/agent-skills, path: skills/code-review-and-quality, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: security-and-hardening, repo: addyosmani/agent-skills, path: skills/security-and-hardening, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: ci-cd-and-automation, repo: addyosmani/agent-skills, path: skills/ci-cd-and-automation, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: shipping-and-launch, repo: addyosmani/agent-skills, path: skills/shipping-and-launch, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  - { name: playwright-cli, repo: microsoft/playwright-cli, path: skills/playwright-cli, commit: 83368cb3bfc0b2bd8ff8af4ade8e0107461ed421 }
+  - { name: sentry-security-review, repo: getsentry/skills, path: skills/security-review, commit: 6d20de492725c78e805aa0741507bb90d1982cc7, upstream_name: security-review }
+  - { name: gha-security-review, repo: getsentry/skills, path: skills/gha-security-review, commit: b11ee5163295996fa6449c4842749811c82ac77c }
+
+# Every agent also has Read, Glob and Grep. No agent has Skill, Agent, WebFetch or WebSearch (spec 2.3).
+# tools: Bash, Edit, Write. jira: read, create, edit, comment, transition. git: read or write (read only: spec 2.10).
+# writes: the files Edit and Write may touch; the protected paths of quality/gates.yaml still apply. max_turns: twice
+# the most model turns of a live run of the role, rounded up to tens (spec 2.2; runs of tasks/archive/agent-roster/
+# verification.md). The most of fe-dev, 130, is its run at max, so a run raised for a hard item still fits.
+roles:
+  pm:
+    description: "Project Manager: writes the morning summary of the space from Jira and GitHub, with the weekly retro figures on Fridays. Read only."
+    model: sonnet
+    effort: medium
+    max_turns: 20
+    tools: [Bash, Write]
+    jira: [read]
+    git: read
+    writes: [".ai/**"]
+    skills: []
+  ba:
+    description: "Business Analyst: writes the SPEC of an Epic with numbered acceptance criteria, then creates its Stories and Tasks from the plan. Give it the Epic key."
+    model: opus
+    effort: xhigh
+    max_turns: 90
+    tools: [Bash, Edit, Write]
+    jira: [read, create, edit, comment]
+    git: write
+    writes: ["docs/specs/**", "CHANGELOG.md", ".ai/**"]
+    skills: [spec-driven-development, interview-me]
+  ux:
+    description: "UI/UX designer: writes design.md for an Epic that touches the UI, as numbered ASCII screens or from approved Figma images. Give it the Epic key."
+    model: sonnet
+    effort: xhigh
+    max_turns: 60
+    tools: [Bash, Edit, Write]
+    jira: [read]
+    git: write
+    writes: ["docs/specs/**", ".ai/**"]
+    skills: [frontend-ui-engineering]
+  sa:
+    description: "Solution Architect: adds the non-functional requirements to a SPEC, then writes the plan of the Epic with its API contract and task list. Give it the Epic key."
+    model: opus
+    effort: xhigh
+    max_turns: 80
+    tools: [Bash, Edit, Write]
+    jira: [read, comment]
+    git: write
+    writes: ["docs/specs/**", "docs/adr/**", ".ai/**"]
+    skills: [planning-and-task-breakdown, api-and-interface-design, documentation-and-adrs]
+  fe-dev:
+    description: "Frontend Developer: builds a ready item, or its FE Sub-task, with TDD on its branch and opens the PR. Give it the Jira key."
+    model: opus
+    effort: high
+    max_turns: 260
+    tools: [Bash, Edit, Write]
+    mcp: { chrome-devtools: [navigation, input, emulation, debugging, network, performance] }
+    jira: [read, edit, comment, transition]
+    git: write
+    writes: ["**"]
+    skills: [test-driven-development, incremental-implementation, frontend-ui-engineering, browser-testing-with-devtools]
+  be-dev:
+    description: "Backend Developer: builds a ready item, or its BE Sub-task, with TDD on its branch and opens the PR. Give it the Jira key."
+    model: opus
+    effort: high
+    max_turns: 170
+    tools: [Bash, Edit, Write]
+    jira: [read, edit, comment, transition]
+    git: write
+    writes: ["**"]
+    skills: [test-driven-development, incremental-implementation, api-and-interface-design]
+  reviewer:
+    description: "Code Reviewer: reviews a PR on five axes and posts the report. Give it the PR number."
+    model: opus
+    effort: xhigh
+    max_turns: 70
+    tools: [Bash, Write]
+    jira: [read]
+    git: read
+    writes: [".ai/**"]
+    skills: [code-review-and-quality]
+  security:
+    description: "Security Engineer: reviews a PR for security, starting from a short threat model, and posts the report. Give it the PR number."
+    model: opus
+    effort: max
+    max_turns: 120
+    tools: [Bash, Write]
+    jira: [read]
+    git: read
+    writes: [".ai/**"]
+    skills: [security-and-hardening, sentry-security-review]
+  qa:
+    description: "Tester/QA Engineer: checks a deployed item against each acceptance criterion, with evidence, and posts the QA report. Give it the Jira key."
+    model: opus
+    effort: high
+    max_turns: 80
+    tools: [Bash, Write]
+    jira: [read, create, edit, comment, transition]
+    git: read
+    writes: [".ai/**"]
+    skills: [playwright-cli]
+  devops:
+    description: "DevOps Engineer: changes CI/CD workflows through a PR, cuts releases and ships. Give it the Jira key."
+    model: opus
+    effort: high
+    max_turns: 50
+    tools: [Bash, Edit, Write]
+    jira: [read, edit, comment, transition]
+    git: write
+    writes: ["**"]
+    skills: [ci-cd-and-automation, shipping-and-launch]

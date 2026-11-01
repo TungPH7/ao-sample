@@ -1,0 +1,158 @@
+# Policies (spec sections 2.4 and 2.7–2.9): limits, error handling, retro metrics, the artifact catalog and languages.
+
+# Rework: request-changes and qa-fail add 1 to the item's Rework count; reaching the limit adds the on_limit effect.
+rework:
+  limit: 3
+  on_limit: flag-needs-you
+
+# Default WIP limits, adjusted at the retro.
+wip_limits:
+  - id: dev-agent
+    scope: "Việc đang làm của mỗi dev agent: Sub-task nếu Story có Sub-task, nếu không thì cả item"
+    limit: 1
+  - id: in-review
+    scope: "Cột In Review (gồm PR đang chờ bạn approve)"
+    limit: 2
+  - id: epic-shaping
+    scope: "Epic ở specifying hoặc planning"
+    limit: 1
+
+retry:
+  flaky_ci_reruns: 1
+  agent_failures_before_stop: 2
+
+error_handling:
+  - situation: "Review yêu cầu sửa, CI đỏ, QA FAIL"
+    action: "Về in-progress, Rework count tăng 1"
+  - situation: "Rework count chạm 3"
+    action: "Gắn cờ \"Needs you\", agent dừng xử lý item"
+  - situation: "CI fail nghi do test chập chờn"
+    action: "Tự chạy lại tối đa 1 lần. Fail lần nữa thì coi là fail thật, và ghi test đó vào danh sách cần sửa"
+  - situation: "Agent thất bại 2 lần liên tiếp ở cùng một bước"
+    action: "Dừng, gắn cờ \"Needs you\", kèm log"
+  - situation: "Chạm giới hạn usage"
+    action: "Dừng, ghi tiến độ vào ledger của item, làm tiếp ở phiên sau"
+  - situation: "Deploy lên môi trường QA thất bại"
+    action: "Item giữ nguyên in-review, gắn cờ; devops xử lý"
+  - situation: "Smoke test sau khi lên Production fail"
+    action: "Rollback về bản trước, tạo Bug Critical"
+
+metrics:
+  - id: cycle-time
+    name: "Cycle time"
+    definition: "Từ lúc vào in-progress tới lúc vào done"
+  - id: release-wait
+    name: "Thời gian chờ release"
+    definition: "Từ lúc item vào done tới lúc bản chứa nó lên Production"
+  - id: throughput
+    name: "Throughput"
+    definition: "Số item vào done trong tuần"
+  - id: rework
+    name: "Rework"
+    definition: "Tổng Rework count, và các item chạm giới hạn 3"
+  - id: escaped-bugs
+    name: "Lỗi lọt"
+    definition: "Số Bug có Found in là Staging hoặc Production, theo từng bản release"
+  - id: waiting-for-you
+    name: "Thời gian chờ bạn"
+    definition: "Tổng thời gian item nằm chờ một cổng duyệt hoặc mang cờ \"Needs you\""
+  - id: usage-per-item
+    name: "Usage mỗi item"
+    definition: "Cấp 1 ghi tay nếu đo được; Cấp 2 đo tự động"
+
+# The artifact catalog (spec section 2.9). created_by lists roles, or is `reporter` (whoever reports the bug)
+# or `assignee` (the agent working on the item). Paths are relative to the project's repo root.
+artifacts:
+  - id: spec
+    name: "SPEC của Epic"
+    template: templates/spec.md
+    created_by: [ba]
+    stored_in:
+      - { place: git, path: "docs/specs/<EPIC-KEY>/spec.md" }
+  - id: design
+    name: "Thiết kế màn hình"
+    template: templates/design.md
+    created_by: [ux]
+    stored_in:
+      - { place: git, path: "docs/specs/<EPIC-KEY>/design.md" }
+      - { place: git, path: "docs/specs/<EPIC-KEY>/design/", note: "ảnh của màn hình kiểu Figma" }
+  - id: plan
+    name: "Plan"
+    template: templates/plan.md
+    created_by: [sa]
+    stored_in:
+      - { place: git, path: "docs/specs/<EPIC-KEY>/plan.md" }
+  - id: adr
+    name: "ADR"
+    template: templates/adr.md
+    created_by: [sa]
+    stored_in:
+      - { place: git, path: "docs/adr/NNNN-<slug>.md" }
+  - id: story
+    name: "Story"
+    template: templates/story.md
+    created_by: [ba]
+    stored_in:
+      - { place: tracker, note: "Mô tả item" }
+  - id: task
+    name: "Task"
+    template: templates/task.md
+    created_by: [ba]
+    stored_in:
+      - { place: tracker, note: "Mô tả item" }
+  - id: bug
+    name: "Bug"
+    template: templates/bug.md
+    created_by: reporter
+    stored_in:
+      - { place: tracker, note: "Mô tả item" }
+  - id: pull-request
+    name: "Mô tả PR (bàn giao từ dev sang reviewer và QA)"
+    template: templates/pull-request.md
+    created_by: [fe-dev, be-dev]
+    stored_in:
+      - { place: github-pr, note: "Mô tả của PR" }
+  - id: review-report
+    name: "Báo cáo review"
+    template: templates/review-report.md
+    created_by: [reviewer, security]
+    stored_in:
+      - { place: github-pr, note: "Review trên PR" }
+  - id: qa-report
+    name: "Báo cáo QA của item"
+    template: templates/qa-report.md
+    created_by: [qa]
+    stored_in:
+      - { place: tracker, note: "Comment trên item, kèm link artifact CI (video, trace)" }
+  - id: regression-report
+    name: "Báo cáo regression của bản release"
+    template: templates/regression-report.md
+    created_by: [qa]
+    stored_in:
+      - { place: git, path: "docs/releases/vX.Y.Z.md", note: "trên nhánh release" }
+  - id: release-notes
+    name: "Release note"
+    template: templates/release-notes.md
+    created_by: [devops, ba]
+    stored_in:
+      - { place: git, path: "CHANGELOG.md" }
+      - { place: tracker, note: "Mô tả Fix Version" }
+      - { place: google-drive, note: "Bản gửi khách" }
+  - id: ledger
+    name: "Ledger tiến độ"
+    template: templates/ledger.md
+    created_by: assignee
+    stored_in:
+      - { place: local, path: ".ai/ledger/<KEY>.md", note: "không commit" }
+
+artifact_notes:
+  - "Mọi đường dẫn tính từ gốc repo của dự án."
+  - "Agent-skills mặc định để SPEC.md ở gốc repo và plan ở tasks/plan.md. Dự án có nhiều Epic nên mỗi Epic có một thư mục riêng, và danh sách task nằm trên Jira thay cho tasks/todo.md; các lệnh của dev-workflow sẽ truyền đường dẫn này cho skill."
+
+language:
+  - what: "Template: tiêu đề và hướng dẫn điền"
+    language: en
+  - what: "Nội dung điền vào SPEC, plan, báo cáo, item Jira"
+    language: vi
+  - what: "Code, commit và PR"
+    language: en

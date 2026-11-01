@@ -1,0 +1,44 @@
+# jira-sync (ai-orchestrator, tracker-integration spec section 2.7): on PR, review, CI, deployment and manual events,
+# moves the Jira work items whose guards hold, with the token of the automation account. Runs the kit copy in
+# .ai-orchestrator/. GitHub runs the workflow_run and deployment_status triggers only from the default branch.
+name: jira-sync
+
+on:
+  pull_request:
+    # closed only clears the Needs you flag merge-gate raised for the PR (dev-workflow spec 2.7).
+    types: [opened, reopened, synchronize, ready_for_review, closed]
+  # Every review: changes asked send the item back; an approval can let a merged and deployed item go to QA.
+  pull_request_review:
+    types: [submitted]
+  workflow_run:
+    # The name of the project's CI workflow.
+    workflows: [CI]
+    types: [completed]
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      item:
+        description: Jira key of the work item to reconcile, such as an Epic whose plan you approved
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  deployments: read
+
+jobs:
+  # The job id is the check run name, which lib/tracker/facts.mjs leaves out of CI.
+  jira-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci --prefix .ai-orchestrator
+      - run: node .ai-orchestrator/scripts/jira-sync.mjs
+        env:
+          JIRA_CI_TOKEN: ${{ secrets.JIRA_CI_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}

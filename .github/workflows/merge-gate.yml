@@ -1,0 +1,49 @@
+# merge-gate (ai-orchestrator, quality-gates spec section 2.5): after every jira-sync run, merges each agent PR that
+# meets every gate with the ao-dev App, and prints what the other PRs wait for. Runs the kit copy in .ai-orchestrator/.
+# GitHub runs workflow_run triggers from the default branch only, so a PR cannot change this file for itself; there is
+# no pull_request or pull_request_review trigger, whose workflows run from the PR.
+name: merge-gate
+
+on:
+  workflow_run:
+    # jira-sync runs after every CI run and every review, so merge-gate sees both.
+    workflows: [jira-sync]
+    types: [completed]
+  workflow_dispatch:
+
+# The workflow token only reads, check runs included; merges use the App token. actions: read dates the CI run of a
+# docs PR's head (dev-workflow spec 2.4).
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  actions: read
+
+# One run at a time; a run waiting behind it sees everything a skipped one would have.
+concurrency:
+  group: merge-gate
+  cancel-in-progress: false
+
+jobs:
+  merge-gate:
+    # A manual run can pick any branch's copy of this file; only the default branch's copy runs.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    # The environment holds the App key and only the default branch may use it. No deployment: its deployment_status
+    # event would start jira-sync, and jira-sync merge-gate again.
+    environment:
+      name: merge-gate
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci --prefix .ai-orchestrator
+      - run: node .ai-orchestrator/scripts/merge-gate.mjs
+        env:
+          AO_DEV_APP_KEY: ${{ secrets.AO_DEV_APP_KEY }}
+          # Reads the Epic of a docs PR, and flags the item of a PR you merge yourself.
+          JIRA_CI_TOKEN: ${{ secrets.JIRA_CI_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}

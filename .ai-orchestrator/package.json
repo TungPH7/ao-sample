@@ -1,0 +1,29 @@
+{
+  "name": "ai-orchestrator-v1",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SDLC contract, templates and workflow kit for AI coding agents",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "validate": "node scripts/validate-contract.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "render": "node scripts/render-docs.mjs",
+    "render:check": "node scripts/render-docs.mjs --check",
+    "jira:checklist": "node scripts/jira-checklist.mjs",
+    "jira:checklist:check": "node scripts/jira-checklist.mjs --check",
+    "jira:check": "node scripts/jira-check.mjs",
+    "gh:protect": "node scripts/gh-protect.mjs",
+    "skills:vendor": "node scripts/vendor-skills.mjs",
+    "agents": "node scripts/render-agents.mjs",
+    "agents:check": "node scripts/render-agents.mjs --check"
+  },
+  "dependencies": {
+    "@secretlint/node": "13.0.7",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
+    "ajv": "8.20.0",
+    "yaml": "2.9.1"
+  }
+}

@@ -1,0 +1,103 @@
+# CI of a project (ai-orchestrator, quality-gates spec section 2.4): four jobs, one check each. jira-sync watches this
+# workflow by its name, CI. merge-gate, audit and the ruleset require the four jobs, which .ai-orchestrator/quality/gates.yaml
+# lists under `checks`. The project provides the npm scripts lint, typecheck, test:coverage (writing lcov) and build.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main, 'release/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The PR's own newest commit, not the merge commit GitHub makes for it; on a push, the pushed commit.
+  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  # Where the changes start: the PR's base branch, or the commit before the push (all zeros for a new branch).
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+
+jobs:
+  # Conventions, suppressions, lowered thresholds and design.md files of a PR, and npm audit (scripts/check-policy.mjs).
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci --prefix .ai-orchestrator
+      - run: node .ai-orchestrator/scripts/check-policy.mjs
+
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --prefix .ai-orchestrator
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - name: Coverage of changed lines
+        if: github.event_name == 'pull_request'
+        run: node .ai-orchestrator/scripts/coverage-diff.mjs --base "$BASE_SHA"
+      - run: npm run build
+
+  # gitleaks on the commits the PR or the push brings, pinned and checked against its published checksum.
+  secrets:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+          rm gitleaks.tar.gz
+      - name: Scan the new commits
+        run: |
+          case "$BASE_SHA" in
+            ''|0000000000000000000000000000000000000000) range="-1 $HEAD_SHA" ;;
+            *) range="$(git merge-base "$BASE_SHA" "$HEAD_SHA")..$HEAD_SHA" ;;
+          esac
+          ./gitleaks git --no-banner --redact --exit-code 1 --log-opts="$range" .
+
+  # Semgrep CE, pinned, through uvx; only findings the changes bring count.
+  sast:
+    runs-on: ubuntu-latest
+    env:
+      SEMGREP_VERSION: 1.180.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Semgrep on the changes
+        run: |
+          baseline=""
+          case "$BASE_SHA" in
+            ''|0000000000000000000000000000000000000000) ;;
+            *) baseline="--baseline-commit $(git merge-base "$BASE_SHA" "$HEAD_SHA")" ;;
+          esac
+          uvx "semgrep==${SEMGREP_VERSION}" scan --config p/default --config p/owasp-top-ten --severity ERROR --error --metrics off $baseline

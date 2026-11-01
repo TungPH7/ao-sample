@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "workflows.yaml",
+  "description": "State machines for work items, with the guards and effects their transitions use (spec section 2.4).",
+  "type": "object",
+  "required": ["workflows", "guards", "effects"],
+  "additionalProperties": false,
+  "properties": {
+    "workflows": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/workflow" }
+    },
+    "guards": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/guard" }
+    },
+    "effects": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/effect" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "ids": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/id" },
+      "uniqueItems": true
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "workflow": {
+      "type": "object",
+      "required": ["applies_to", "initial", "final", "states", "transitions"],
+      "additionalProperties": false,
+      "properties": {
+        "applies_to": { "type": "array", "$ref": "#/$defs/ids", "minItems": 1 },
+        "initial": { "$ref": "#/$defs/id" },
+        "final": { "type": "array", "$ref": "#/$defs/ids", "minItems": 1 },
+        "states": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/state" }
+        },
+        "transitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transition" }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": { "$ref": "#/$defs/text" },
+        "board_column": { "$ref": "#/$defs/id" }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "required": ["id", "from", "to", "actors"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "from": {
+          "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "array", "$ref": "#/$defs/ids", "minItems": 1 }]
+        },
+        "to": { "$ref": "#/$defs/id" },
+        "actors": { "type": "array", "$ref": "#/$defs/ids", "minItems": 1 },
+        "guards": { "$ref": "#/$defs/ids" },
+        "effects": { "$ref": "#/$defs/ids" },
+        "note": { "$ref": "#/$defs/text" }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "required": ["description", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "description": { "$ref": "#/$defs/text" },
+        "evidence": {
+          "type": "object",
+          "required": ["source"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "enum": ["git", "github-pr", "ci", "deploy", "tracker", "human"] },
+            "artifact": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": ["description"],
+      "additionalProperties": false,
+      "properties": {
+        "description": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}
