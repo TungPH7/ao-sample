@@ -23,10 +23,11 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 | Trường | Bắt buộc | Giới hạn | Ghi chú |
 |---|---|---|---|
 | Tiêu đề | Có | 1–100 ký tự | Bỏ khoảng trắng ở đầu và cuối trước khi kiểm tra và lưu. Tiêu đề chỉ có khoảng trắng coi như trống. Được trùng tiêu đề với ghi chú khác. |
-| Nội dung | Không | 0–1000 ký tự | Lưu nguyên như đã nhập, kể cả các lần xuống dòng. |
+| Nội dung | Không | 0–1000 ký tự | Lưu nguyên như đã nhập: không bỏ khoảng trắng hay lần xuống dòng nào. Chỉ chuẩn hóa như dưới đây. |
 | Thời gian tạo | Hệ thống tự gán | | Người dùng không nhập. Dùng để sắp xếp danh sách. |
 
-- **Đếm ký tự:** đếm theo ký tự Unicode mà người dùng nhìn thấy sau khi chuẩn hóa NFC, nên một chữ có dấu như "ệ" tính là 1 ký tự, dù gõ bằng bộ gõ nào.
+- **Chuẩn hóa:** trước khi kiểm tra, form và API chuẩn hóa tiêu đề và nội dung giống nhau, theo thứ tự: đổi sang dạng NFC; đổi mọi `\r\n` và mọi `\r` đứng riêng thành `\n`; với tiêu đề thì bỏ khoảng trắng ở đầu và cuối. API lưu đúng dạng đã chuẩn hóa này. Người dùng không thấy khác biệt, vì dạng trước và sau chuẩn hóa hiện ra như nhau.
+- **Đếm ký tự:** đếm số điểm mã Unicode của giá trị đã chuẩn hóa, tức `Array.from(value.normalize('NFC')).length`. Một chữ có dấu như "ệ" tính là 1 ký tự, dù gõ bằng bộ gõ nào, và mỗi lần xuống dòng tính 1 ký tự. Emoji ghép tính nhiều hơn 1 ký tự: 👍🏽 tính 2, 👨‍👩‍👧 tính 5, cờ 🇻🇳 tính 2. Cách đếm này cho cùng kết quả ở mọi trình duyệt và ở Node.js; đếm như mắt thấy bằng `Intl.Segmenter` thì không, vì kết quả của nó tùy phiên bản Unicode của từng nơi.
 - **Khi nào lỗi hiện:** lỗi quá dài hiện ngay khi giá trị vượt giới hạn trong lúc gõ, và form không chặn gõ thêm, để người dùng thấy lỗi thay vì bị cắt chữ; lỗi thiếu tiêu đề hiện khi rời ô Tiêu đề lúc nó trống, hoặc khi bấm Lưu, để không báo lỗi lúc người dùng chưa kịp gõ; lỗi biến mất ngay khi giá trị hợp lệ trở lại.
 - **Danh sách:** mới nhất lên đầu, theo thời gian tạo. Mỗi ghi chú hiện tiêu đề, toàn bộ nội dung và thời gian tạo dạng `dd/MM/yyyy HH:mm`, theo giờ của máy người dùng. Danh sách hiện mọi ghi chú, không phân trang.
 - **Thông báo lỗi**, đúng nguyên văn:
@@ -103,7 +104,7 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 - **Dữ liệu cá nhân:** ứng dụng không thu thập gì về người dùng: không tài khoản, không cookie, không analytics, không lưu địa chỉ IP. Ghi chú hiện cho mọi người mở ứng dụng; người dùng có thể tự gõ thông tin cá nhân vào đó, và thông tin này mất khi API khởi động lại. Không gửi ghi chú cho dịch vụ bên ngoài nào.
 - **Một ghi chú gồm:** `id` là chuỗi duy nhất do API sinh; `title` là tiêu đề đã bỏ khoảng trắng ở đầu và cuối; `content` là nội dung, bằng `""` khi không gửi; `createdAt` là thời điểm API nhận yêu cầu, theo đồng hồ của máy chủ API, gửi dạng ISO 8601 UTC có mili giây (`2026-11-02T07:40:00.000Z`).
 - **Khoảng trắng** bị bỏ ở tiêu đề là khoảng trắng theo `String.prototype.trim` của JavaScript: dấu cách, tab, xuống dòng và khoảng trắng Unicode như NBSP. Ký tự vô hình không phải khoảng trắng, như U+200B, thì không bị bỏ. Form và API dùng cùng định nghĩa này.
-- **Chuẩn hóa và đếm ký tự:** theo câu trả lời cho Q1 và Q2 ở mục Open Questions.
+- **Chuẩn hóa và đếm ký tự:** theo mục Rules. Form và API dùng cùng một hàm chuẩn hóa và đếm (xem Tech Stack). Ghi chú mà `POST` và `GET` trả về mang giá trị đã chuẩn hóa, đúng như được lưu.
 - **Thứ tự:** mới nhất trước, theo thứ tự API nhận yêu cầu. Hai ghi chú tạo trong cùng một mili giây vẫn đúng thứ tự tạo, nên không chỉ sắp theo `createdAt`.
 - **Thời gian tạo trên trang:** web đổi `createdAt` sang giờ của máy người dùng và hiện dạng `dd/MM/yyyy HH:mm`, 24 giờ. Việc đổi giờ chạy ở trình duyệt, không ở máy chủ web, để giờ hiện theo múi giờ của người dùng.
 - **Gửi lại:** `POST` không idempotent: gửi lại là tạo thêm một ghi chú. Form chặn gửi đôi trong lúc chờ (AC7) và không tự gửi lại khi lỗi. Một rủi ro được chấp nhận trong Epic này: mạng đứt sau khi API đã lưu, người dùng thấy lỗi lưu, bấm Lưu lại, và có hai ghi chú giống nhau. Epic không dùng `Idempotency-Key`, vì không có chỗ nào tự gửi lại yêu cầu.
@@ -174,8 +175,8 @@ test('AC3 shows an error next to the title when it is empty', async ({ page }) =
 
 ## Testing Strategy
 
-- **Unit, viết theo TDD cho mỗi Story** (Vitest): quy tắc kiểm tra tiêu đề và nội dung, gồm các biên 0, 1, 100, 101 và 1000, 1001 ký tự, chữ có dấu, khoảng trắng; kho trong bộ nhớ và thứ tự mới nhất lên đầu. Ở `apps/api/src/**/*.spec.ts` và `apps/web/src/**/*.test.tsx`.
-- **Integration, viết theo TDD cho mỗi Story**: API qua supertest ở `apps/api/test/notes.e2e-spec.ts`, cho tạo hợp lệ, từng loại lỗi 400 và danh sách; form và danh sách của web với Testing Library, API được giả lập.
+- **Unit, viết theo TDD cho mỗi Story** (Vitest): quy tắc kiểm tra tiêu đề và nội dung, gồm các biên 0, 1, 100, 101 và 1000, 1001 ký tự, chữ có dấu (cả khi gõ ở dạng NFD), khoảng trắng, emoji ghép (👍🏽 tính 2 ký tự), xuống dòng `\r\n` và `\r` (tính 1 ký tự và được lưu thành `\n`); kho trong bộ nhớ và thứ tự mới nhất lên đầu. Ở `apps/api/src/**/*.spec.ts` và `apps/web/src/**/*.test.tsx`.
+- **Integration, viết theo TDD cho mỗi Story**: API qua supertest ở `apps/api/test/notes.e2e-spec.ts`, cho tạo hợp lệ, từng loại lỗi 400 và danh sách, và cho việc API lưu giá trị đã chuẩn hóa (gửi NFD và `\r\n`, nhận lại NFC và `\n`); form và danh sách của web với Testing Library, API được giả lập.
 - **E2E** (Playwright, `e2e/notes/`): một test cho mỗi tiêu chí AC1–AC13, tên bắt đầu bằng mã tiêu chí. AC9 gửi yêu cầu thẳng tới API bằng `request`, như `e2e/smoke.spec.ts`.
 - **Kho dùng chung khi chạy E2E:** Playwright chạy song song (`fullyParallel`) trên cùng một tiến trình API, nên test không được giả định danh sách trống hay đếm tổng số ghi chú; mỗi test dùng tiêu đề riêng của nó. AC7, AC8, AC10 và AC13 cần kiểm soát được trạng thái hoặc câu trả lời của API; plan của `sa` nói cách làm, trong giới hạn của mục Boundaries.
 
@@ -194,7 +195,4 @@ test('AC3 shows an error next to the title when it is empty', async ({ page }) =
 
 ## Open Questions
 
-Hai câu hỏi kỹ thuật của `sa`. Mỗi câu có đề xuất; trả lời xong thì đưa câu trả lời vào mục Rules và mục Non-functional requirements.
-
-- **Q1. Với emoji, "ký tự" được đếm thế nào?** Mục Rules nói đếm theo ký tự mà người dùng nhìn thấy sau khi chuẩn hóa NFC. Với chữ Việt, đếm điểm mã Unicode sau NFC cho đúng kết quả đó ("ệ" tính là 1). Với emoji ghép thì khác: 👍🏽 là 2 điểm mã, 👨‍👩‍👧 là 5, cờ 🇻🇳 là 2, dù người dùng thấy mỗi cái là 1 ký tự. Muốn đếm đúng như mắt thấy thì phải dùng `Intl.Segmenter`, mà kết quả của nó phụ thuộc phiên bản Unicode của từng trình duyệt và của Node.js. Khi đó form và API có thể đếm khác nhau ở giới hạn, đúng tình huống "API trả 400 trong khi form thấy hợp lệ" trong design.md. **Đề xuất:** đếm điểm mã Unicode sau NFC, tức `Array.from(value.normalize('NFC')).length`. Cách đếm này cho cùng một kết quả ở mọi trình duyệt và ở Node.js; emoji ghép tính nhiều hơn 1 ký tự. Ghi rõ điều đó vào mục Rules, và thêm một ca emoji vào unit test.
-- **Q2. Chuẩn hóa giá trị trước khi đếm và lưu?** Ô nhiều dòng của trình duyệt ghi mỗi lần xuống dòng bằng một ký tự `\n`, còn một yêu cầu gửi thẳng tới API có thể dùng `\r\n`, tức 2 ký tự. Vì vậy form và API đếm khác nhau ở giới hạn 1000; đây là câu hỏi `ux` để lại trong design.md. Chữ có dấu cũng có hai dạng, NFC và NFD, trông giống hệt nhau. **Đề xuất:** form và API chuẩn hóa giống nhau rồi mới kiểm tra, và API lưu dạng đã chuẩn hóa: đổi sang NFC; đổi `\r\n` và `\r` đứng riêng thành `\n`; bỏ khoảng trắng ở đầu và cuối tiêu đề; giữ nguyên mọi khoảng trắng của nội dung. Mỗi lần xuống dòng tính 1 ký tự. Người dùng không thấy khác biệt, vì các dạng này hiện ra như nhau. Câu "Lưu nguyên như đã nhập" ở mục Rules được hiểu là không bỏ khoảng trắng hay lần xuống dòng nào.
+Không có.
