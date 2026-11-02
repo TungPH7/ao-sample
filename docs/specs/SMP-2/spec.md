@@ -69,9 +69,60 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 - Lưu bền vững: ghi chú mất khi API khởi động lại.
 - Đăng nhập, và ghi chú riêng của từng người.
 
+### Non-functional requirements
+
+**Phạm vi chạy.** Ứng dụng chỉ chạy ở máy dev và trong CI. Môi trường Development của Pilot là một bước deploy giả lập (`deploy.yml` chỉ in ra commit), nên API không chạy ở nơi công khai nào. Các giới hạn dưới đây đặt theo phạm vi đó. Muốn đưa ứng dụng lên một môi trường công khai thì cần một Epic riêng, vì khi đó phải có thêm giới hạn tần suất, giới hạn số ghi chú và lưu bền vững.
+
+**Hiệu năng.** Khối lượng tính toán là tối đa 1000 ghi chú, mỗi ghi chú dài tới giới hạn của mục Rules.
+
+| Chỉ số | Mục tiêu | Kiểm bằng |
+|---|---|---|
+| Thời gian API trả lời `POST` và `GET` ghi chú, khi kho có 1000 ghi chú dài tối đa | ≤ 200 ms ở p95 trên máy dev, không tính mạng | Integration test nạp 1000 ghi chú rồi gọi `GET`. Ngưỡng của test nới ra 1 s để không chập chờn trên CI, vẫn đủ bắt lỗi chậm theo bình phương |
+| Từ lúc bấm Lưu tới lúc ghi chú mới hiện ở đầu danh sách | ≤ 1 s, khi web và API chạy cùng máy | Đo tay một lần bằng DevTools; E2E AC1 kiểm là không tải lại trang |
+| Mở trang tới lúc thấy đủ 1000 ghi chú | ≤ 2 s với bản build production (`npm run build` rồi `next start`), cùng máy | Đo tay một lần trước khi Story Xem danh sách vào review |
+| Lỗi kiểm tra hiện hay mất sau một phím gõ | Ngay trong lần vẽ của phím đó, không debounce, kể cả khi ô dài 1001 ký tự | Unit test của form |
+| Số yêu cầu tới API | Mỗi lần lưu đúng 1 `POST`; mở trang đúng 1 `GET`; lưu thành công thì không tải lại danh sách, trừ khi danh sách đang hiện lỗi tải (xem Open Questions của design.md) | Integration test của web, API được giả lập |
+| Thời gian web chờ một yêu cầu | Tối đa 10 s. Quá thời gian thì tính là lỗi: lưu thì hiện lỗi lưu (AC8) và giữ nguyên dữ liệu trong form, tải danh sách thì hiện lỗi tải (AC13) | Integration test của web dùng đồng hồ giả |
+
+**Bảo mật.** Không có đăng nhập và mọi người dùng chung một danh sách, nên ai gọi được API cũng tạo và đọc được mọi ghi chú. Đó là chủ ý của Epic (mục Out of Scope). Các rủi ro còn lại: XSS lưu trữ, tức nội dung một người gõ chạy thành mã trên trang của người khác; dữ liệu sai lọt qua API; dữ liệu lộ ra qua log hay thông báo lỗi.
+
+- **XSS:** tiêu đề, nội dung và thời gian tạo chỉ vào trang dưới dạng chữ hoặc giá trị thuộc tính do React gán, nên React tự escape (AC12). Code của Epic không dùng `dangerouslySetInnerHTML`, `innerHTML` hay `eval`, và không biến chữ trong ghi chú thành đường link.
+- **Kiểm tra ở biên API:** thân yêu cầu `POST` phải là một object JSON; `title` phải là chuỗi; `content` là chuỗi hoặc không có. Sai kiểu (số, `null`, mảng, object) cũng trả 400 nêu trường đó, như khi giá trị sai quy tắc. API chỉ đọc `title` và `content`; trường khác như `id`, `createdAt` hay `__proto__` bị bỏ qua, không được lưu, vì `id` và thời gian tạo do API gán.
+- **Chỉ nhận JSON:** `POST` chỉ nhận `Content-Type: application/json`; thân dạng khác bị từ chối và không tạo ghi chú. Mặc định Nest còn đọc cả `application/x-www-form-urlencoded`, nên một form HTML ở trang khác gửi được tới API mà không cần CORS.
+- **Kích thước:** giữ giới hạn mặc định 100 kB cho thân yêu cầu; vượt quá thì nhận 413 và không ghi chú nào được tạo.
+- **Lỗi trả về:** mọi lỗi có cùng một dạng JSON. Lỗi 400 nêu từng trường sai bằng mã máy đọc được và không lặp lại giá trị đã gửi. Lỗi 500 chỉ có một thông báo chung, không có stack trace. JSON hỏng trả 400 với thông báo cố định: hiện Nest trả nguyên câu lỗi của `JSON.parse`, kèm một đoạn thân yêu cầu (đã thử trên `apps/api`).
+- **Log:** không ghi tiêu đề, nội dung hay thân yêu cầu vào log (mục Boundaries). Nếu có log yêu cầu, nó chỉ gồm method, đường dẫn, mã trạng thái và thời gian xử lý. Lỗi 500 được ghi stack vào log của máy chủ, nhưng không kèm thân yêu cầu.
+- **CORS:** không mở cho mọi origin (`*`). Nếu trình duyệt gọi thẳng API thì chỉ mở cho origin của web, đọc từ biến môi trường, mặc định `http://localhost:3000`. Plan chọn giữa gọi thẳng API và đi qua máy chủ web.
+- **Không làm trong Epic này**, do phạm vi chạy: giới hạn tần suất, header bảo mật (CSP, helmet), giới hạn số ghi chú. Lớp chống XSS chính là việc React escape chữ.
+
+**Dữ liệu và thời gian lưu.**
+
+- **Nơi lưu:** ghi chú nằm trong bộ nhớ của một tiến trình API duy nhất. Không chạy nhiều bản API, vì mỗi bản sẽ có một danh sách riêng.
+- **Thời gian lưu:** từ lúc tạo tới khi tiến trình API dừng hoặc khởi động lại, kể cả khi `npm run dev` tự khởi động lại API mỗi lần sửa code. Không có sao lưu, xuất dữ liệu hay xóa từng ghi chú. Web không lưu ghi chú ở trình duyệt (localStorage, IndexedDB, cookie, service worker), nên dữ liệu mất cùng lúc với API.
+- **Không cache:** câu trả lời `GET` có `Cache-Control: no-store`, và web không cache danh sách (không `use cache`, không cache của `fetch`, dù `next.config.ts` bật `cacheComponents`). Nhờ vậy mở hay tải lại trang luôn thấy ghi chú mới nhất (AC11).
+- **Dữ liệu cá nhân:** ứng dụng không thu thập gì về người dùng: không tài khoản, không cookie, không analytics, không lưu địa chỉ IP. Ghi chú hiện cho mọi người mở ứng dụng; người dùng có thể tự gõ thông tin cá nhân vào đó, và thông tin này mất khi API khởi động lại. Không gửi ghi chú cho dịch vụ bên ngoài nào.
+- **Một ghi chú gồm:** `id` là chuỗi duy nhất do API sinh; `title` là tiêu đề đã bỏ khoảng trắng ở đầu và cuối; `content` là nội dung, bằng `""` khi không gửi; `createdAt` là thời điểm API nhận yêu cầu, theo đồng hồ của máy chủ API, gửi dạng ISO 8601 UTC có mili giây (`2026-11-02T07:40:00.000Z`).
+- **Khoảng trắng** bị bỏ ở tiêu đề là khoảng trắng theo `String.prototype.trim` của JavaScript: dấu cách, tab, xuống dòng và khoảng trắng Unicode như NBSP. Ký tự vô hình không phải khoảng trắng, như U+200B, thì không bị bỏ. Form và API dùng cùng định nghĩa này.
+- **Chuẩn hóa và đếm ký tự:** theo câu trả lời cho Q1 và Q2 ở mục Open Questions.
+- **Thứ tự:** mới nhất trước, theo thứ tự API nhận yêu cầu. Hai ghi chú tạo trong cùng một mili giây vẫn đúng thứ tự tạo, nên không chỉ sắp theo `createdAt`.
+- **Thời gian tạo trên trang:** web đổi `createdAt` sang giờ của máy người dùng và hiện dạng `dd/MM/yyyy HH:mm`, 24 giờ. Việc đổi giờ chạy ở trình duyệt, không ở máy chủ web, để giờ hiện theo múi giờ của người dùng.
+- **Gửi lại:** `POST` không idempotent: gửi lại là tạo thêm một ghi chú. Form chặn gửi đôi trong lúc chờ (AC7) và không tự gửi lại khi lỗi. Một rủi ro được chấp nhận trong Epic này: mạng đứt sau khi API đã lưu, người dùng thấy lỗi lưu, bấm Lưu lại, và có hai ghi chú giống nhau. Epic không dùng `Idempotency-Key`, vì không có chỗ nào tự gửi lại yêu cầu.
+- **Bộ nhớ:** 1000 ghi chú dài tối đa chiếm khoảng 5 MB, nên trong phạm vi chạy này không cần giới hạn số ghi chú.
+
 ## Tech Stack
 
-Như README: Next.js 16.4.3 và React 19.3.0 ở `apps/web`, NestJS 12 ở `apps/api`, Vitest 4, Playwright 1.64.1, Node.js 24. Ghi chú lưu trong bộ nhớ của tiến trình API, không có cơ sở dữ liệu. `sa` ghi thêm ở đây thư viện mà Epic cần, kèm phiên bản.
+Như README: Next.js 16.4.3 và React 19.3.0 ở `apps/web`, NestJS 12 (bản cài 12.3.2) ở `apps/api`, Vitest 4, Playwright 1.64.1, Node.js 24. Ghi chú lưu trong bộ nhớ của tiến trình API, không có cơ sở dữ liệu.
+
+Epic không thêm thư viện npm nào, ở cả hai app lẫn ở gốc. Những thứ có sẵn mà Epic dùng và README chưa nêu:
+
+| Dùng | Phiên bản | Để làm gì |
+|---|---|---|
+| `String.prototype.normalize('NFC')`, `Array.from` | Có sẵn trong Node.js 24 và trình duyệt | Chuẩn hóa và đếm ký tự theo mục Rules, cùng một cách ở form và API |
+| `crypto.randomUUID()` | Node.js 24 (bản cài 24.17.0) | Sinh `id` của ghi chú |
+| `Date` của trình duyệt (`getDate`, `getHours`…) | Có sẵn | Ghép tay thời gian tạo thành `dd/MM/yyyy HH:mm` theo giờ của máy người dùng. Không dùng `toLocaleString` hay `Intl.DateTimeFormat('vi-VN')`, vì thứ tự ngày giờ của chúng tùy locale và phiên bản ICU |
+| Body parser JSON của `@nestjs/platform-express` | 12.3.2, trên Express 5.3.0 | Đọc thân yêu cầu, giữ giới hạn mặc định 100 kB |
+
+Epic không dùng `class-validator`, `class-transformer` hay Zod. Quy tắc chỉ có hai trường, và các thư viện đó đếm độ dài trên chuỗi chưa chuẩn hóa NFC (`.max()` của Zod còn đếm theo đơn vị UTF-16). Vì vậy một hàm kiểm tra thuần, viết tay, gọn hơn và dùng được ở cả hai app. Plan chốt cách hai app dùng chung hàm đó trong cấu trúc của mục Project Structure, không thêm workspace mới.
 
 ## Commands
 
@@ -143,4 +194,7 @@ test('AC3 shows an error next to the title when it is empty', async ({ page }) =
 
 ## Open Questions
 
-Không có.
+Hai câu hỏi kỹ thuật của `sa`. Mỗi câu có đề xuất; trả lời xong thì đưa câu trả lời vào mục Rules và mục Non-functional requirements.
+
+- **Q1. Với emoji, "ký tự" được đếm thế nào?** Mục Rules nói đếm theo ký tự mà người dùng nhìn thấy sau khi chuẩn hóa NFC. Với chữ Việt, đếm điểm mã Unicode sau NFC cho đúng kết quả đó ("ệ" tính là 1). Với emoji ghép thì khác: 👍🏽 là 2 điểm mã, 👨‍👩‍👧 là 5, cờ 🇻🇳 là 2, dù người dùng thấy mỗi cái là 1 ký tự. Muốn đếm đúng như mắt thấy thì phải dùng `Intl.Segmenter`, mà kết quả của nó phụ thuộc phiên bản Unicode của từng trình duyệt và của Node.js. Khi đó form và API có thể đếm khác nhau ở giới hạn, đúng tình huống "API trả 400 trong khi form thấy hợp lệ" trong design.md. **Đề xuất:** đếm điểm mã Unicode sau NFC, tức `Array.from(value.normalize('NFC')).length`. Cách đếm này cho cùng một kết quả ở mọi trình duyệt và ở Node.js; emoji ghép tính nhiều hơn 1 ký tự. Ghi rõ điều đó vào mục Rules, và thêm một ca emoji vào unit test.
+- **Q2. Chuẩn hóa giá trị trước khi đếm và lưu?** Ô nhiều dòng của trình duyệt ghi mỗi lần xuống dòng bằng một ký tự `\n`, còn một yêu cầu gửi thẳng tới API có thể dùng `\r\n`, tức 2 ký tự. Vì vậy form và API đếm khác nhau ở giới hạn 1000; đây là câu hỏi `ux` để lại trong design.md. Chữ có dấu cũng có hai dạng, NFC và NFD, trông giống hệt nhau. **Đề xuất:** form và API chuẩn hóa giống nhau rồi mới kiểm tra, và API lưu dạng đã chuẩn hóa: đổi sang NFC; đổi `\r\n` và `\r` đứng riêng thành `\n`; bỏ khoảng trắng ở đầu và cuối tiêu đề; giữ nguyên mọi khoảng trắng của nội dung. Mỗi lần xuống dòng tính 1 ký tự. Người dùng không thấy khác biệt, vì các dạng này hiện ra như nhau. Câu "Lưu nguyên như đã nhập" ở mục Rules được hiểu là không bỏ khoảng trắng hay lần xuống dòng nào.
