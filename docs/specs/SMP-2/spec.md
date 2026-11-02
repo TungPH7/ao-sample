@@ -1,6 +1,6 @@
 # Spec: Ghi chú: tạo và xem danh sách
 
-> **Epic:** SMP-2 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-2 · **Status:** Draft
+> **Epic:** SMP-2 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-2 · **Status:** Approved 2026-11-02
 
 ## Objective
 

@@ -1,6 +1,6 @@
 # Design: Ghi chú: tạo và xem danh sách
 
-> **Epic:** SMP-2 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-2 · **Spec:** docs/specs/SMP-2/spec.md · **Status:** Draft
+> **Epic:** SMP-2 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-2 · **Spec:** docs/specs/SMP-2/spec.md · **Status:** Approved 2026-11-02
 >
 > **Figma version:** none
 
