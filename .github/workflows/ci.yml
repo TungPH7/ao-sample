@@ -101,3 +101,4 @@ jobs:
             *) baseline="--baseline-commit $(git merge-base "$BASE_SHA" "$HEAD_SHA")" ;;
           esac
           uvx "semgrep==${SEMGREP_VERSION}" scan --config p/default --config p/owasp-top-ten --severity ERROR --error --metrics off $baseline
+# probe: touch this file after the first push
