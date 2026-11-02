@@ -36,16 +36,18 @@ function run(role, purpose, context, options, extra = {}) {
   return { role, key: context.key, effort: extra.effort ?? options.roster.roles[role].effort, purpose, prompt: promptFor(purpose, context), ...extra };
 }
 
-// What the run state of the item says first, for the same command: answers go to the run that asked, a run that
-// stopped goes on in its session, and a run that failed as many times as policies.yaml allows stops the command.
-// null when the state says nothing.
-function carryOn(command, facts, options) {
+// What the run state of the item says first, for the same command: answers go to the newest run of `asker`, the role
+// whose questions are open (the newest run when none is), a run that stopped goes on in its session, and a run that
+// failed as many times as policies.yaml allows stops the command. null when the state says nothing.
+function carryOn(command, facts, options, asker) {
   const runs = (facts.run?.runs ?? []).filter((r) => r.command === command);
   const last = runs.at(-1);
   const key = facts.item.key;
   if (options.answers !== undefined) {
-    if (!last || !ASKING.includes(last.role) || !last.session) return stop(`no run of ba, ux or sa on ${key} asked questions to answer`, `/ao-status ${key}`);
-    return go([{ role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: answersPrompt(key, options.answers), checkout: last.checkout }]);
+    const asked = asker ? runs.filter((r) => r.role === asker).at(-1) : last;
+    if (!asked || !ASKING.includes(asked.role) || !asked.session) return stop(`no run of ba, ux or sa on ${key} asked questions to answer`, `/ao-status ${key}`);
+    const pr = facts.docs?.pr?.state === 'open' ? facts.docs.pr.number : undefined;
+    return go([{ role: asked.role, key, effort: asked.effort, purpose: asked.purpose, resume: asked.session, prompt: answersPrompt(key, options.answers, { pr }), checkout: asked.checkout }]);
   }
   if (!last) return null;
   if (STOPPED.includes(last.outcome)) {
@@ -94,8 +96,11 @@ function decideSpec(facts, options) {
   if (blocked) return { ...blocked, lines };
   const { used, limit } = facts.wip.epicShaping;
   if (used > limit) return { ...stop(`${used} Epics are in Specifying or Planning, over the WIP limit epic-shaping of ${limit}`, 'Finish or cancel another Epic first'), lines };
-  const carried = carryOn('spec', facts, options);
+  // Open questions come before the docs PR: questions left on an open docs PR still go to you, and to who asked them.
+  const pending = specQuestions(facts);
+  const carried = carryOn('spec', facts, options, pending?.asker);
   if (carried) return { ...carried, lines };
+  if (pending) return { ...questionsStop(key, pending.artifact, pending.questions, pending.asker), lines };
   if (docs.pr?.state === 'open') {
     return { ...stop(`the docs PR #${docs.pr.number} of ${key} is open: stage spec is done and waits for you at gate ① spec-approval`, `Read the diff of PR #${docs.pr.number}, click Approve spec on ${key}, then /ao-plan ${key}`), lines };
   }
@@ -103,16 +108,8 @@ function decideSpec(facts, options) {
   const checkout = { branch: docs.branch, from: 'develop' };
   const at = (role, purpose, extra) => run(role, purpose, context, options, { checkout, ...extra });
   if (!docs.spec) return go([at('ba', 'spec-write'), at('ux', 'design', { when: 'the SPEC has screens' }), at('sa', 'spec-nfr'), at('ba', 'docs-pr')], lines);
-  const specQuestions = openQuestions(docs.spec);
-  if (specQuestions.length > 0) return { ...questionsStop(key, 'spec.md', specQuestions, lastAsker(facts, 'spec', ['ba', 'sa']) ?? 'ba'), lines };
   const runs = [];
-  if (SCREENS.test(docs.spec)) {
-    if (!docs.design) runs.push(at('ux', 'design'));
-    else {
-      const designQuestions = openQuestions(docs.design);
-      if (designQuestions.length > 0) return { ...questionsStop(key, 'design.md', designQuestions, 'ux'), lines };
-    }
-  }
+  if (SCREENS.test(docs.spec) && !docs.design) runs.push(at('ux', 'design'));
   if (!NFR.test(docs.spec)) runs.push(at('sa', 'spec-nfr'));
   runs.push(at('ba', 'docs-pr'));
   return go(runs, lines);
@@ -120,6 +117,17 @@ function decideSpec(facts, options) {
 
 // The role among `roles` whose run of `command` came last: who to give the answers to.
 const lastAsker = (facts, command, roles) => (facts.run?.runs ?? []).filter((r) => r.command === command && roles.includes(r.role)).at(-1)?.role;
+
+// The open questions of stage spec, SPEC first, then design.md when the SPEC has screens: { artifact, questions, asker }
+// or null.
+function specQuestions(facts) {
+  const { docs } = facts;
+  if (!docs.spec) return null;
+  const spec = openQuestions(docs.spec);
+  if (spec.length > 0) return { artifact: 'spec.md', questions: spec, asker: lastAsker(facts, 'spec', ['ba', 'sa']) ?? 'ba' };
+  const design = SCREENS.test(docs.spec) && docs.design ? openQuestions(docs.design) : [];
+  return design.length > 0 ? { artifact: 'design.md', questions: design, asker: 'ux' } : null;
+}
 
 // /ao-plan <EPIC>: sa writes the plan, ba creates the items; it ends at gate ②. Once you approved the plan, the second
 // run asks jira-sync to refine the items, and merge-gate then merges the docs PR.
@@ -138,7 +146,7 @@ function decidePlan(facts, options) {
   if (blocked) return { ...blocked, lines };
   if (epic.state === 'in-progress') return { ...afterPlanGate(facts), lines };
   if (epic.state !== 'planning') return { ...stop(`${key} is ${epic.status}: stage plan is over`, `/ao-status ${key}`), lines };
-  const carried = carryOn('plan', facts, options);
+  const carried = carryOn('plan', facts, options, docs.plan && openQuestions(docs.plan).length > 0 ? 'sa' : undefined);
   if (carried) return { ...carried, lines };
   if (docs.pr?.state !== 'open') return { ...stop(`${key} has no open docs PR on ${docs.branch}`, `/ao-spec ${key} opens it; if it was closed, reopen it`), lines };
   // The day of gate ① in UTC, as the changelog of the Epic records it: sa writes it in the Status of the SPEC and design.

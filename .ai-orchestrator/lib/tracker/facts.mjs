@@ -212,6 +212,8 @@ export async function readChecks(github, sha) {
       runs.every((r) => r.status === 'completed' && PASSED.includes(r.conclusion)) &&
       [null, 'success'].includes(statusState),
     failed: runs.some((r) => FAILED.includes(r.conclusion)) || ['failure', 'error'].includes(statusState),
+    // Whether any check run or status is on the commit yet: CI that never started looks like CI still running.
+    started: runs.length + status.total_count > 0,
   };
 }
 

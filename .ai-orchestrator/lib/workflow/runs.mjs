@@ -54,10 +54,14 @@ function outcomeOf(result) {
   return 'done';
 }
 
+// The first line of an Open Questions section that says there is none, alone or before ":" or a full stop. A question
+// that begins with the same words ("Không có Figma." of ux on SMP-2) is still a question.
+const NONE = /^(?:Không có|Không còn|None)(?: câu hỏi)?(?: mở)?(?: nào)?(?: open)?(?: questions?)?\s*(?:$|[.!:;])/i;
+
 // The questions still open in the Open Questions section of a Markdown artifact: the first line of each item of its
 // top-level list, or its text when it has no list. None when the section is missing or empty, holds only the template's
-// comment, or says there is none ("Không có", "Không còn câu hỏi mở", "None"), even with notes on the old answers
-// after that.
+// comment, or its first line says there is none ("Không có", "Không còn câu hỏi mở", "None"), even with notes on the
+// old answers after that.
 export function openQuestions(markdown) {
   const lines = markdown.replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
   const start = lines.findIndex((line) => /^#{2,6}\s+Open Questions\s*$/i.test(line));
@@ -66,9 +70,8 @@ export function openQuestions(markdown) {
   const end = lines.findIndex((line, i) => i > start && new RegExp(`^#{1,${level}}\\s`).test(line));
   const section = lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() !== '');
   const plain = (text) => text.replace(/\*\*|__/g, '').trim();
-  // Not \b: JavaScript sees the ó of "có" as a non-word character.
-  if (section.some((line) => /^(?:[-*]\s+|\d+[.)]\s+)?(?:Không có|Không còn câu hỏi mở|None)(?=$|[\s.,:;!])/i.test(plain(line)))) return [];
   const unlisted = (line) => plain(line.replace(/^(?:[-*]|\d+[.)])\s+/, ''));
+  if (section.length > 0 && NONE.test(unlisted(section[0]))) return [];
   // Questions named Q1, Q2… at the start of a line, in a list item or a bold paragraph: the bullets and tables that
   // explain them are not questions (sa on DEMO-20, dev-workflow T17).
   const named = section.filter((line) => /^\S/.test(line) && /^Q\d+\b/.test(unlisted(line))).map(unlisted);
