@@ -4,6 +4,7 @@
 // the effort of the roster. A report with Critical or High findings open, the newest or the full one, always asks for
 // the whole PR again: a review of the new part would not carry those findings, and merge-gate reads only the newest
 // report. Pure.
+import { matchesGlob } from '../quality/glob.mjs';
 import { protectedPaths } from '../quality/merge-gate.mjs';
 
 export const MAX_DELTA_LINES = 300;
@@ -30,4 +31,18 @@ export function securityScope({ report, full = report, compare, gates }) {
   const paths = protectedPaths(compare.files, gates);
   if (paths.length > 0) return { mode: 'full', reason: `the changes since ${since} touch ${paths.join(', ')}` };
   return { mode: 'delta', reason: `${lines} lines changed since ${since}`, since: full.sha, at: full.at, lines };
+}
+
+// The effort of a full security review (Pilot 1, review cost): the roster's when the item or one of its Sub-tasks has an
+// effort label (sa marked it at gate ②), or the PR touches a protected path or a path of security_review in
+// quality/gates.yaml; security_review.lower_effort otherwise. files: the paths the PR changes; protectedPaths: those of
+// them that are protected. Returns { effort, reason }.
+export function fullReviewEffort({ files, protectedPaths: touched = [], item, gates, rosterEffort }) {
+  const rule = gates.security_review;
+  const labelled = [item, ...(item?.subtasks ?? [])].find((i) => i?.effort);
+  if (labelled) return { effort: rosterEffort, reason: `${labelled.key} has the effort label ${labelled.effort}` };
+  if (touched.length > 0) return { effort: rosterEffort, reason: `the PR touches the protected path ${touched.join(', ')}` };
+  const risky = files.filter((file) => rule.roster_effort_paths.some((glob) => matchesGlob(glob, file)));
+  if (risky.length > 0) return { effort: rosterEffort, reason: `the PR touches ${risky.join(', ')}` };
+  return { effort: rule.lower_effort, reason: 'no protected path, no path of security_review, no effort label' };
 }

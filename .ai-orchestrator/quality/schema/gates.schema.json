@@ -3,7 +3,7 @@
   "title": "quality/gates.yaml",
   "description": "Quality gates of a project (quality-gates spec sections 2.2 to 2.8 and 6).",
   "type": "object",
-  "required": ["checks", "coverage", "dependencies", "suppressions", "protected_branches", "merge_method", "protected_paths", "docs_pull_requests", "github_apps"],
+  "required": ["checks", "coverage", "dependencies", "suppressions", "protected_branches", "merge_method", "protected_paths", "security_review", "docs_pull_requests", "github_apps"],
   "additionalProperties": false,
   "properties": {
     "checks": {
@@ -71,6 +71,15 @@
           "path": { "$ref": "#/$defs/text" },
           "editors": { "$ref": "#/$defs/roles" }
         }
+      }
+    },
+    "security_review": {
+      "type": "object",
+      "required": ["roster_effort_paths", "lower_effort"],
+      "additionalProperties": false,
+      "properties": {
+        "roster_effort_paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "lower_effort": { "enum": ["low", "medium", "high", "xhigh", "max"] }
       }
     },
     "docs_pull_requests": {

@@ -150,6 +150,7 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
   return {
     number: pr.number,
     title: pr.title,
+    body: pr.body ?? '',
     state: pr.state,
     securityCompare: compare && { base: since, status: compare.status, files: (compare.files ?? []).map(({ filename, previous_filename: previous, additions, deletions }) => ({ filename, previous_filename: previous, additions, deletions })) },
     merged: Boolean(pr.merged_at),

@@ -23,6 +23,7 @@ import { createGitHubClient } from '../lib/tracker/github-client.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 import { gatherFacts } from '../lib/workflow/facts.mjs';
+import { adfText, buildReviewPack } from '../lib/workflow/review-pack.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
 import { decideStep } from '../lib/workflow/steps.mjs';
 
@@ -141,6 +142,7 @@ async function main() {
       agent: (run, { log }) => startAgent(run, join(runsDir, key, log)),
       git: (checkout) => prepareCheckout(checkout),
       dispatch: (action) => dispatchJiraSync(action.key),
+      pack: reviewPackWriter({ github, jira }),
       store: {
         readState: (k) => readJson(join(runsDir, k, 'state.json')),
         writeState: (k, state) => writeFileSync(join(runsDir, k, 'state.json'), `${JSON.stringify(state, null, 2)}\n`),
@@ -197,6 +199,61 @@ function startAgent(run, logFile) {
 
 // Puts the checkout on `branch` before a run: from origin when it is there, else new from origin/<from>. A checkout with
 // changes is left alone.
+// The context pack of a review run (Pilot 1, review cost, option 2): read from git, GitHub and Jira at the PR head and
+// written to .ai/reviews/<PR>-context.md. Any failure leaves the run without a pack: the agent then fetches what it
+// needs itself, as before.
+export function reviewPackWriter({ github, jira }) {
+  return async (run, facts) => {
+    const { pr, item } = facts;
+    try {
+      git('fetch', '--quiet', 'origin', pr.base, pr.headRef);
+      const head = pr.headSha;
+      const baseSha = git('merge-base', `origin/${pr.base}`, head).stdout.trim();
+      if (!baseSha) throw new Error(`no merge base of origin/${pr.base} and ${head.slice(0, 7)}`);
+      const show = (path) => {
+        const shown = git('show', `${head}:${path}`);
+        return shown.status === 0 ? shown.stdout : null;
+      };
+      const range = `${baseSha}...${head}`;
+      const files = git('diff', '--name-status', range).stdout.trim().split('\n').filter(Boolean).map((line) => {
+        const [status, ...paths] = line.split('\t');
+        return { status, path: paths.at(-1) };
+      });
+      const modified = files.filter(({ status }) => status.startsWith('M')).map(({ path }) => ({ path, text: show(path) ?? '' }));
+      const epic = item.parent && /epic/i.test(item.parent.type) ? item.parent.key : null;
+      const adrs = git('ls-tree', '--name-only', head, 'docs/adr/').stdout.trim().split('\n').filter((name) => name.endsWith('.md'));
+      const docs = epic && {
+        epic,
+        plan: show(`docs/specs/${epic}/plan.md`),
+        spec: show(`docs/specs/${epic}/spec.md`),
+        design: show(`docs/specs/${epic}/design.md`),
+        adrs: adrs.map((path) => ({ name: path.split('/').at(-1), text: show(path) ?? '' })),
+      };
+      const runs = await github.get(`/commits/${head}/check-runs`, { per_page: 100 });
+      const issue = await jira.get(`/rest/api/3/issue/${encodeURIComponent(item.key)}`, { fields: 'description' });
+      const text = buildReviewPack({
+        pr: { ...pr, baseSha },
+        checks: (runs.check_runs ?? []).map(({ name, status, conclusion }) => `${name}: ${conclusion ?? status}`),
+        item: { ...item, parent: item.parent?.key ?? null, links: (item.blockedBy ?? []).map((key) => `is blocked by ${key}`), description: adfText(issue.fields?.description) },
+        docs,
+        template: readFileSync(join(kitDir, 'templates', 'review-report.md'), 'utf8'),
+        files,
+        modified,
+        diff: git('diff', range).stdout,
+        stat: git('diff', '--stat', range).stdout,
+      });
+      const name = `.ai/reviews/${pr.number}-context.md`;
+      mkdirSync(join(projectDir, '.ai', 'reviews'), { recursive: true });
+      writeFileSync(join(projectDir, name), text);
+      console.log(`context pack ${name}: ${text.length} characters`);
+      return name;
+    } catch (error) {
+      console.log(`no context pack for PR #${pr.number} (${error.message}); the agent fetches what it needs itself`);
+      return null;
+    }
+  };
+}
+
 function prepareCheckout({ branch, from, pull }) {
   const dirty = git('status', '--porcelain', '--untracked-files=no').stdout.trim();
   if (dirty) return { ok: false, reason: `the checkout has changes not committed (${dirty.split('\n').length} files): commit or stash them, then run the command again` };

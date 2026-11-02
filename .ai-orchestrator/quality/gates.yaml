@@ -55,6 +55,39 @@ protected_paths:
   - { path: ".ai-orchestrator/**" }
   - { path: ".mcp.json" }
 
+# The effort of a full security review (Pilot 1, review cost): the roster's when the PR touches a protected path or one
+# of these paths, or when its item or one of its Sub-tasks has an effort label; lower_effort otherwise. A review of only
+# the changes since the last report stays at high (dev-workflow spec 2.6).
+security_review:
+  roster_effort_paths:
+    # dependencies and how the app is built and run
+    - "**/package.json"
+    - "**/package-lock.json"
+    - "**/Dockerfile*"
+    - "**/docker-compose*.yml"
+    - "**/.env*"
+    - "**/next.config.*"
+    - "**/main.ts"
+    # where requests come in or are checked: NestJS and Next.js
+    - "**/*.module.ts"
+    - "**/*.controller.*"
+    - "**/*.guard.*"
+    - "**/*.pipe.*"
+    - "**/*.filter.*"
+    - "**/*.interceptor.*"
+    - "**/*.middleware.*"
+    - "**/*.strategy.*"
+    - "**/*.dto.*"
+    - "**/middleware.*"
+    - "**/route.*"
+    - "**/actions.*"
+    # who the user is, and secrets
+    - "**/auth/**"
+    - "**/*auth*.*"
+    - "**/*session*.*"
+    - "**/*crypto*.*"
+  lower_effort: high
+
 # The docs PR of an Epic (dev-workflow spec 2.4): every file it changes is under these paths, its head is this branch,
 # ao-dev opened it, and <EPIC> is an Epic. merge-gate merges it without reviews or approval once the Epic is past this
 # gate and the CI run of its head started before you approved; audit takes its merge commit on the same terms. Rule Q5
