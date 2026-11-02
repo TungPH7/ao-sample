@@ -4,7 +4,8 @@ import { matchesGlob } from './glob.mjs';
 
 // Documentation may name a suppression without using one, and the kit copy is a protected path anyway.
 const NOT_CHECKED = ['**/*.md', '.ai-orchestrator/**'];
-const TEST_FILE = ['**/*.{test,spec}.*', 'e2e/**'];
+// NestJS names its end-to-end tests test/<name>.e2e-spec.ts.
+const TEST_FILE = ['**/*.{test,spec}.*', '**/*.e2e-spec.*', 'e2e/**'];
 const LEVELS = ['info', 'low', 'moderate', 'high', 'critical'];
 
 // [{ file, line, text }] for every line a zero-context `git diff` adds.

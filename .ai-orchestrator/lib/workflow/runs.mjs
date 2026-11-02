@@ -54,9 +54,9 @@ function outcomeOf(result) {
   return 'done';
 }
 
-// The first line of an Open Questions section that says there is none, alone or before ":" or a full stop. A question
-// that begins with the same words ("Không có Figma." of ux on SMP-2) is still a question.
-const NONE = /^(?:Không có|Không còn|None)(?: câu hỏi)?(?: mở)?(?: nào)?(?: open)?(?: questions?)?\s*(?:$|[.!:;])/i;
+// The first line of an Open Questions section that says there is none: alone, or before punctuation such as ":", ",",
+// a dash or "(". A question that begins with the same words ("Không có Figma." of ux on SMP-2) is still a question.
+const NONE = /^(?:Không có|Không còn|None)(?: câu hỏi)?(?: mở)?(?: nào)?(?: cả)?(?: open)?(?: questions?)?\s*(?:$|[.!:;,(–—-])/i;
 
 // The questions still open in the Open Questions section of a Markdown artifact: the first line of each item of its
 // top-level list, or its text when it has no list. None when the section is missing or empty, holds only the template's
