@@ -12,8 +12,9 @@ disable-model-invocation: true
 ## What to do
 
 - On STOP with Questions, show the human each question in Vietnamese, one list, and ask for the answers. When they
-  answer, write the answers, as they are, to `.ai/runs/<KEY>/answers.md`, where KEY is the Epic, and run the command
-  below with `--answers .ai/runs/<KEY>/answers.md` added. Never put the answers in a shell command.
+  answer, copy their reply word for word to `.ai/runs/<KEY>/answers.md`, where KEY is the Epic: add nothing, and do
+  not restate the questions or the proposals. Then run the command below with `--answers .ai/runs/<KEY>/answers.md`
+  added. Never put the answers in a shell command.
 - On any other STOP, tell the human the reason and the command or clicks it names, in Vietnamese, and stop.
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs spec $0 --go` with the Bash tool in the background, with a
   timeout of 7200000 ms, and wait for its notification. Do not poll.

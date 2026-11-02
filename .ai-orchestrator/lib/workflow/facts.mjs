@@ -161,7 +161,7 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     files: files.map(({ filename }) => filename),
     protectedPaths: protectedPaths(files, gates),
     docsEpic: docsPullRequest({ pr, files, gates, apps, space }),
-    ci: { green: checks.green, failed: checks.failed, pending: !checks.green && !checks.failed },
+    ci: { green: checks.green, failed: checks.failed, pending: !checks.green && !checks.failed, started: checks.started },
     reports,
     securityFull,
     changesRequested: changesRequestedOn(reviews, head),

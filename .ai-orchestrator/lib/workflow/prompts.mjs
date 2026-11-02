@@ -43,9 +43,11 @@ export function promptFor(purpose, context) {
 // A run that stopped before its end (the process was stopped, or the usage limit), resumed in its session.
 export const resumePrompt = (key) => `Your run stopped before it ended. Read .ai/ledger/${key}.md and go on from where you stopped.`;
 
-// The human's answers to the open questions an agent left, given to the run that asked them.
-export function answersPrompt(key, answers) {
+// The human's answers to the open questions an agent left, given to the run that asked them. Once the docs PR is open
+// (`pr`), the answer is pushed so the PR shows it.
+export function answersPrompt(key, answers, { pr } = {}) {
   const text = answers.replace(/\r\n?/g, '\n').trim();
   if (text === '') throw new Error('the answers file is empty');
-  return `The human answered your open questions:\n\n${text}\n\nTurn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on ${key}, edit that comment to say they are answered.`;
+  const push = pr ? `\n\nThe docs PR #${pr} is open: push the branch after you commit, so the PR shows your change.` : '';
+  return `The human answered your open questions:\n\n${text}\n\nTurn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on ${key}, edit that comment to say they are answered.${push}`;
 }

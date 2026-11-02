@@ -12,7 +12,10 @@
 import { readRun } from './runs.mjs';
 import { decideStep } from './steps.mjs';
 
-export const LIMITS = { maxRuns: 8, ciWaitMs: 30 * 60 * 1000, syncWaitMs: 15 * 60 * 1000, pollMs: 30 * 1000 };
+// ciStartMs: how long a PR head may wait for its first check run before the runner stops (SMP-2: GitHub started none).
+export const LIMITS = { maxRuns: 8, ciWaitMs: 30 * 60 * 1000, ciStartMs: 5 * 60 * 1000, syncWaitMs: 15 * 60 * 1000, pollMs: 30 * 1000 };
+// The most of an agent's answer state.json keeps; the whole answer stays in the run's log.
+const TEXT_MAX = 2000;
 
 // The command that starts one run: ao-agent.mjs with the role, the prompt, stream-json output, and the effort both as a
 // flag and as CLAUDE_CODE_EFFORT_LEVEL, which beats the flag and may be set in your environment (plan decision 6). It
@@ -88,7 +91,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       ...(next.resume && { resumed: true }),
       ...(next.checkout && { checkout: next.checkout }),
       ...(next.head && { head: next.head }),
-      text: read.text.slice(0, 2000),
+      text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,
     };
     // state.json is written before anything else, so a stopped shell can go on from here.
     store.writeState(key, { ...state, runs: [...state.runs, record] });
@@ -102,9 +105,13 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       reason = `${next.role} stopped without a result: run the same command again; the run goes on in its session`;
       break;
     }
-    // After a run that may have pushed, wait for CI before deciding again.
-    ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined }), (_, f) => !ciPending(f), limits.ciWaitMs, { sleep, now, limits }));
-    if (ciPending(facts)) reason = `CI is still running after ${Math.round(limits.ciWaitMs / 60000)} minutes: run the command again once it is done`;
+    // After a run that may have pushed, wait for CI before deciding again, but not for a CI that never starts.
+    const since = now();
+    const startMs = limits.ciStartMs ?? LIMITS.ciStartMs;
+    ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined }), (_, f) => !ciPending(f) || (ciIdle(f) && now() - since >= startMs), limits.ciWaitMs, { sleep, now, limits }));
+    const idle = ciIdle(facts);
+    if (idle) reason = `no CI run started on PR #${idle.number} after ${Math.round(startMs / 60000)} minutes: GitHub Actions did not start the workflows. Open the Actions tab of the repo; on a new repo, push a commit that touches .github/workflows/, then run the command again`;
+    else if (ciPending(facts)) reason = `CI is still running after ${Math.round(limits.ciWaitMs / 60000)} minutes: run the command again once it is done`;
   }
   const final = reason ? { go: false, reason, next: `/ao-${command} ${arg ?? ''}`.trim(), lines: decision.lines ?? [] } : decision;
   if (key) store.writeLast(key, lastReport({ command, key, made, decision: final, state: store.readState(key) }));
@@ -114,6 +121,8 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
 const same = (a, b) => a.role === b.role && a.purpose === b.purpose && a.key === b.key && !b.resume;
 
 const ciPending = (facts) => Boolean((facts.pr?.state === 'open' && facts.pr.ci.pending) || (facts.docs?.pr?.state === 'open' && facts.docs.pr.ci.pending));
+// The open PR whose head has no check run or status yet; null when CI started everywhere.
+const ciIdle = (facts) => [facts.pr, facts.docs?.pr].find((pr) => pr?.state === 'open' && pr.ci.pending && pr.ci.started === false) ?? null;
 
 // Gathers and decides until `done(decision, facts)` or the time is up.
 async function waitFor(gatherFacts, decideOn, done, waitMs, { sleep, now, limits }) {
