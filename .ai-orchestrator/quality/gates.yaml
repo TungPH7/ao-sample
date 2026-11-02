@@ -13,7 +13,7 @@ coverage:
   changed_lines_min: 80
   lcov: ["coverage/lcov.info", "apps/*/coverage/lcov.info"]
   source: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"]
-  exclude: ["**/*.{test,spec}.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", ".ai-orchestrator/**", ".claude/**"]
+  exclude: ["**/*.{test,spec}.*", "**/*.e2e-spec.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", ".ai-orchestrator/**", ".claude/**"]
 
 # npm audit fails on this level and above. An exception names a GitHub advisory, why it is accepted, and when it ends.
 dependencies:

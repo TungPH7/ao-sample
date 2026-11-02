@@ -29,7 +29,8 @@ export function agentCommand(run, kitDir) {
   };
 }
 
-export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, store, sleep, now = Date.now, log = () => {}, limits = LIMITS }) {
+export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
+  const limits = { ...LIMITS, ...given };
   let facts = await gather();
   let decision = decide(command, facts, options);
   const key = facts.item?.key;
@@ -107,7 +108,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     }
     // After a run that may have pushed, wait for CI before deciding again, but not for a CI that never starts.
     const since = now();
-    const startMs = limits.ciStartMs ?? LIMITS.ciStartMs;
+    const startMs = Math.min(limits.ciStartMs, limits.ciWaitMs);
     ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined }), (_, f) => !ciPending(f) || (ciIdle(f) && now() - since >= startMs), limits.ciWaitMs, { sleep, now, limits }));
     const idle = ciIdle(facts);
     if (idle) reason = `no CI run started on PR #${idle.number} after ${Math.round(startMs / 60000)} minutes: GitHub Actions did not start the workflows. Open the Actions tab of the repo; on a new repo, push a commit that touches .github/workflows/, then run the command again`;
