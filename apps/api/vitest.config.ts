@@ -7,7 +7,18 @@ export default defineConfig({
   test: {
     globals: true,
     root: './',
-    include: ['**/*.spec.ts'],
+    // Two projects, so `vitest run --coverage` runs both and writes one lcov
+    // that counts the lines the integration tests cover too.
+    projects: [
+      {
+        extends: true,
+        test: { name: 'unit', include: ['**/*.spec.ts'] },
+      },
+      {
+        extends: true,
+        test: { name: 'integration', include: ['test/**/*.e2e-spec.ts'] },
+      },
+    ],
     coverage: {
       provider: 'v8',
       // lcovonly writes coverage/lcov.info, which the CI of ai-orchestrator reads.
