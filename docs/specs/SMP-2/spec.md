@@ -12,11 +12,13 @@ Người dùng ghi lại nhanh một điều cần nhớ: tạo ghi chú có ti�
 
 **Người dùng:** bất kỳ ai mở ứng dụng. Không có đăng nhập, nên mọi người dùng chung một danh sách.
 
+**Trang:** một trang Ghi chú duy nhất ở `/notes`, form tạo ở trên, danh sách ở dưới. Trang chủ `/`, hiện còn là trang mẫu của Next.js, chuyển thẳng tới `/notes`.
+
 **Màn hình:** Epic có giao diện, nên `ux` vẽ màn hình trong `docs/specs/SMP-2/design.md`, cạnh file này, và trỏ tới các tiêu chí bằng mã `AC<n>` bên dưới.
 
 ### Rules
 
-Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy tắc, cùng giới hạn và cùng cách đếm.
+Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy tắc, cùng giới hạn và cùng cách đếm. Nội dung không bắt buộc.
 
 | Trường | Bắt buộc | Giới hạn | Ghi chú |
 |---|---|---|---|
@@ -25,7 +27,8 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 | Thời gian tạo | Hệ thống tự gán | | Người dùng không nhập. Dùng để sắp xếp danh sách. |
 
 - **Đếm ký tự:** đếm theo ký tự Unicode mà người dùng nhìn thấy sau khi chuẩn hóa NFC, nên một chữ có dấu như "ệ" tính là 1 ký tự, dù gõ bằng bộ gõ nào.
-- **Khi nào lỗi hiện** (xem Q4): lỗi quá dài hiện ngay khi giá trị vượt giới hạn trong lúc gõ, và form không chặn gõ thêm; lỗi thiếu tiêu đề hiện khi rời ô Tiêu đề lúc nó trống, hoặc khi bấm Lưu; lỗi biến mất ngay khi giá trị hợp lệ trở lại.
+- **Khi nào lỗi hiện:** lỗi quá dài hiện ngay khi giá trị vượt giới hạn trong lúc gõ, và form không chặn gõ thêm, để người dùng thấy lỗi thay vì bị cắt chữ; lỗi thiếu tiêu đề hiện khi rời ô Tiêu đề lúc nó trống, hoặc khi bấm Lưu, để không báo lỗi lúc người dùng chưa kịp gõ; lỗi biến mất ngay khi giá trị hợp lệ trở lại.
+- **Danh sách:** mới nhất lên đầu, theo thời gian tạo. Mỗi ghi chú hiện tiêu đề, toàn bộ nội dung và thời gian tạo dạng `dd/MM/yyyy HH:mm`, theo giờ của máy người dùng. Danh sách hiện mọi ghi chú, không phân trang.
 - **Thông báo lỗi**, đúng nguyên văn:
 
 | Trường hợp | Thông báo | Hiện ở |
@@ -54,7 +57,7 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 **Story: Xem danh sách ghi chú.** Là người dùng, tôi muốn xem danh sách các ghi chú đã tạo để đọc lại chúng.
 
 - AC10: Given chưa có ghi chú nào, When mở trang Ghi chú, Then thấy "Chưa có ghi chú nào." thay cho danh sách.
-- AC11: Given đã tạo ghi chú A rồi tới ghi chú B, When mở hoặc tải lại trang Ghi chú, Then thấy cả hai, B ở trên A, và mỗi ghi chú hiện tiêu đề, nội dung giữ nguyên các lần xuống dòng, và thời gian tạo.
+- AC11: Given đã tạo ghi chú A rồi tới ghi chú B, When mở hoặc tải lại trang Ghi chú, Then thấy cả hai, B ở trên A, và mỗi ghi chú hiện tiêu đề, nội dung giữ nguyên các lần xuống dòng, và thời gian tạo dạng `dd/MM/yyyy HH:mm` theo giờ của máy người dùng.
 - AC12: Given tiêu đề hoặc nội dung có đoạn như `<b>đậm</b>` hay `<script>alert(1)</script>`, When ghi chú hiện trong danh sách, Then thấy đúng từng ký tự đã nhập, không thành chữ đậm và không chạy mã.
 - AC13: Given API không trả được danh sách, When mở trang Ghi chú, Then thấy "Không tải được danh sách ghi chú. Vui lòng thử lại." thay cho danh sách.
 
@@ -86,7 +89,7 @@ npm run test:e2e             # Playwright, tự chạy hai app
 
 ## Project Structure
 
-Theo đề xuất ở Q2; `sa` chốt trong plan.
+Trang Ghi chú ở `/notes`, trang chủ chuyển tới đó; `sa` chốt tên file trong plan.
 
 ```
 apps/api/src/notes/          → module notes: controller, service, kho trong bộ nhớ, DTO; unit test *.spec.ts cạnh file
@@ -140,7 +143,4 @@ test('AC3 shows an error next to the title when it is empty', async ({ page }) =
 
 ## Open Questions
 
-- **Q1: Giới hạn độ dài là bao nhiêu?** Epic nói có giới hạn nhưng không nêu số. Đề xuất: tiêu đề 1–100 ký tự, nội dung 0–1000 ký tự, tức nội dung không bắt buộc. AC4, AC5 và mục Rules viết theo đề xuất này.
-- **Q2: Trang Ghi chú nằm ở đâu?** Đề xuất: một trang duy nhất ở `/notes`, form tạo ở trên, danh sách ở dưới; trang chủ `/`, hiện còn là trang mẫu của Next.js, chuyển thẳng tới `/notes`.
-- **Q3: Danh sách sắp xếp và hiện những gì?** Đề xuất: mới nhất lên đầu; mỗi ghi chú hiện tiêu đề, toàn bộ nội dung và thời gian tạo dạng `dd/MM/yyyy HH:mm` theo giờ của máy người dùng; hiện tất cả, không phân trang. AC11 viết theo đề xuất này.
-- **Q4: "Lỗi hiện ngay cạnh ô nhập" là hiện vào lúc nào?** Đề xuất: lỗi quá dài hiện ngay khi gõ vượt giới hạn, và form không chặn gõ thêm, để người dùng thấy lỗi thay vì bị cắt chữ; lỗi thiếu tiêu đề hiện khi rời ô Tiêu đề hoặc khi bấm Lưu, để không báo lỗi lúc người dùng chưa kịp gõ; lỗi biến mất ngay khi sửa đúng. AC3–AC6 viết theo đề xuất này.
+Không có.
