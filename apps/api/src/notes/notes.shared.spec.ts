@@ -402,4 +402,17 @@ describe('notes.shared.ts', () => {
   it('has no decorator', () => {
     expect(source).not.toMatch(/^\s*@\w/m);
   });
+
+  it('uses no API that only Node.js or only browsers have (ADR-0001)', () => {
+    expect(source).not.toMatch(/\/\/\/\s*<reference\b/);
+
+    // Comments may name such APIs, as line 9 names crypto.randomUUID().
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    const platformOnly =
+      /\b(?:process|Buffer|global|globalThis|window|document|navigator|localStorage|sessionStorage)\b/g;
+
+    expect(code.match(platformOnly)).toBeNull();
+  });
 });
