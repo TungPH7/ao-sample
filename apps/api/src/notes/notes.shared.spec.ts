@@ -9,12 +9,12 @@ import {
 } from './notes.shared.js';
 
 // Characters written as escapes, so an editor cannot change their Unicode form.
-const E_NFD = 'é'; // "e" + combining acute accent, as some input methods type "é"
-const E_NFC = 'é'; // "é" as one code point
-const NBSP = ' ';
-const ZERO_WIDTH_SPACE = '​';
+const E_NFD = 'e\u0301'; // "e" + combining acute accent, as some input methods type "é"
+const E_NFC = '\u00e9'; // "é" as one code point
+const NBSP = '\u00a0';
+const ZERO_WIDTH_SPACE = '\u200b';
 const THUMBS_UP_MEDIUM_SKIN = '\u{1F44D}\u{1F3FD}'; // 👍🏽
-const FAMILY = '\u{1F468}‍\u{1F469}‍\u{1F467}'; // 👨‍👩‍👧
+const FAMILY = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}'; // 👨‍👩‍👧
 const FLAG_VN = '\u{1F1FB}\u{1F1F3}'; // 🇻🇳
 
 describe('limits', () => {
@@ -37,8 +37,8 @@ describe('countChars', () => {
   });
 
   it('counts a Vietnamese word the same in NFD and NFC', () => {
-    const nfd = 'Việt';
-    expect(countChars(nfd)).toBe(countChars('Việt'));
+    const nfd = 'Vie\u0323\u0302t';
+    expect(countChars(nfd)).toBe(countChars('Vi\u1ec7t'));
     expect(countChars(nfd)).toBe(4);
   });
 
@@ -46,7 +46,7 @@ describe('countChars', () => {
     expect(countChars(THUMBS_UP_MEDIUM_SKIN)).toBe(2);
   });
 
-  it('counts 👨‍👩‍👧 as 5 characters', () => {
+  it('counts 👨\u200d👩\u200d👧 as 5 characters', () => {
     expect(countChars(FAMILY)).toBe(5);
   });
 
@@ -162,7 +162,7 @@ describe('checkTitle', () => {
     expect(checkTitle(`${THUMBS_UP_MEDIUM_SKIN.repeat(50)}a`)).toBe('TOO_LONG');
   });
 
-  it('answers TOO_LONG for 20 × 👨‍👩‍👧 and one more letter', () => {
+  it('answers TOO_LONG for 20 × 👨\u200d👩\u200d👧 and one more letter', () => {
     expect(checkTitle(`${FAMILY.repeat(20)}a`)).toBe('TOO_LONG');
   });
 
@@ -212,7 +212,7 @@ describe('checkContent', () => {
     expect(checkContent(THUMBS_UP_MEDIUM_SKIN.repeat(500))).toBeNull();
   });
 
-  it('answers TOO_LONG for 200 × 👨‍👩‍👧 and one more letter', () => {
+  it('answers TOO_LONG for 200 × 👨\u200d👩\u200d👧 and one more letter', () => {
     expect(checkContent(`${FAMILY.repeat(200)}a`)).toBe('TOO_LONG');
   });
 });
