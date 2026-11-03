@@ -11,3 +11,16 @@ test('the API reports that it is up', async ({ request }) => {
   expect(response.status()).toBe(200);
   expect(await response.json()).toEqual({ status: 'ok' });
 });
+
+// ADR-0002: the web forwards exactly one path, /api/notes, to the API.
+test('the web forwards /api/notes to the API', async ({ request }) => {
+  const response = await request.get('/api/notes');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toMatch(/^application\/json/);
+});
+
+test('the web forwards no other /api path', async ({ request }) => {
+  const response = await request.get('/api/health');
+  expect(response.status()).toBe(404);
+  expect(response.headers()['content-type']).toMatch(/^text\/html/);
+});
