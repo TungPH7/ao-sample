@@ -5,6 +5,27 @@
 export const TITLE_MAX_CHARS = 100;
 export const CONTENT_MAX_CHARS = 1000;
 
+export interface Note {
+  id: string; // crypto.randomUUID()
+  title: string; // normalized: NFC, line breaks as \n, no spaces at both ends; 1–100 characters
+  content: string; // normalized: NFC, line breaks as \n; 0–1000 characters; "" when not sent
+  createdAt: string; // ISO 8601 UTC with milliseconds, such as "2026-11-02T07:40:00.000Z"
+}
+export interface CreateNoteInput {
+  title: string;
+  content?: string;
+}
+export interface NoteList {
+  data: Note[];
+}
+
+export type NoteField = 'title' | 'content';
+export type NoteFieldErrorCode = 'REQUIRED' | 'TOO_LONG' | 'INVALID_TYPE';
+export interface NoteFieldError {
+  field: NoteField;
+  code: NoteFieldErrorCode;
+}
+
 const LINE_BREAK = /\r\n?/g;
 
 // NFC, then every \r\n and every lone \r becomes \n, then the spaces at both ends go.
@@ -34,4 +55,41 @@ export function checkContent(value: string): 'TOO_LONG' | null {
   return countChars(normalizeContent(value)) > CONTENT_MAX_CHARS
     ? 'TOO_LONG'
     : null;
+}
+
+// Checks a request body as the API receives it. On success, answers the values
+// the API stores; otherwise at most one error per field, title before content.
+export function checkNote(input: {
+  title?: unknown;
+  content?: unknown;
+}):
+  | { ok: true; value: { title: string; content: string } }
+  | { ok: false; errors: NoteFieldError[] } {
+  const errors: NoteFieldError[] = [];
+  let title = '';
+  let content = '';
+
+  if (input.title === undefined) {
+    errors.push({ field: 'title', code: 'REQUIRED' });
+  } else if (typeof input.title !== 'string') {
+    errors.push({ field: 'title', code: 'INVALID_TYPE' });
+  } else {
+    title = normalizeTitle(input.title);
+    const code = checkTitle(title);
+    if (code) errors.push({ field: 'title', code });
+  }
+
+  if (input.content === undefined) {
+    // Not sent: the note is stored with an empty content.
+  } else if (typeof input.content !== 'string') {
+    errors.push({ field: 'content', code: 'INVALID_TYPE' });
+  } else {
+    content = normalizeContent(input.content);
+    const code = checkContent(content);
+    if (code) errors.push({ field: 'content', code });
+  }
+
+  return errors.length > 0
+    ? { ok: false, errors }
+    : { ok: true, value: { title, content } };
 }
