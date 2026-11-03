@@ -50,6 +50,7 @@ Trình duyệt chỉ gọi `/api/notes` trên origin của web. `next.config.ts`
 
 - Đã thử bằng `next dev` 16.4.3 và một API giả (spike, không commit): rewrite giữ nguyên mã trạng thái (200, 201, 400, 500), thân JSON và header `Cache-Control: no-store`. Khi API tắt, web trả 500 cho trình duyệt và ghi `Failed to proxy` vào log, không kèm thân yêu cầu.
 - API không có CORS. Không trang nào ở origin khác đọc được câu trả lời của nó qua trình duyệt.
+- Rủi ro đã chấp nhận: khi `npm run dev` chạy, API nghe ở mọi giao diện mạng (`app.listen(port)` không truyền host, `apps/api/src/main.ts`) và không kiểm header `Host`. Máy cùng mạng gọi được cổng 3001 nếu tường lửa cho qua, và một trang web dùng DNS rebinding đọc và tạo được ghi chú, nên dòng trên chỉ đúng khi không có DNS rebinding. Người duyệt chấp nhận rủi ro này cho Pilot 1 (2026-11-03), vì dữ liệu là ghi chú mẫu trong bộ nhớ và ứng dụng chỉ chạy ở máy dev và CI. Cách chặn (API nghe ở loopback, từ chối `Host` ngoài danh sách, web tự kiểm `Host` cho `/api/notes`) là một item riêng sau Pilot 1.
 - Web chỉ mở đúng `/api/notes`. Endpoint mới của API muốn trình duyệt dùng được thì phải thêm rewrite, và việc đó là có chủ ý.
 - E2E chặn yêu cầu bằng `page.route('**/api/notes', …)`, không cần preflight hay header CORS. AC9 vẫn gửi thẳng tới `http://localhost:3001/notes`.
 - Với bản build production, giá trị `API_URL` đọc lúc `next build` được ghi vào bản build. Đổi `API_URL` thì phải build lại. Deploy của Pilot là giả lập, nên điều này chưa ảnh hưởng.
