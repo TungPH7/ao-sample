@@ -1,6 +1,8 @@
 import {
   CONTENT_MAX_CHARS,
   TITLE_MAX_CHARS,
+  checkContent,
+  checkTitle,
   countChars,
   normalizeContent,
   normalizeTitle,
@@ -108,5 +110,109 @@ describe('normalizeContent', () => {
 
   it('counts \\r\\n as 1 character once normalized', () => {
     expect(countChars(normalizeContent('a\r\nb'))).toBe(3);
+  });
+});
+
+describe('checkTitle', () => {
+  it('answers REQUIRED for 0 characters', () => {
+    expect(checkTitle('')).toBe('REQUIRED');
+  });
+
+  it('accepts 1 character', () => {
+    expect(checkTitle('a')).toBeNull();
+  });
+
+  it('accepts 100 characters', () => {
+    expect(checkTitle('a'.repeat(100))).toBeNull();
+  });
+
+  it('answers TOO_LONG for 101 characters', () => {
+    expect(checkTitle('a'.repeat(101))).toBe('TOO_LONG');
+  });
+
+  it('answers REQUIRED for a title of only spaces, tabs and line breaks', () => {
+    expect(checkTitle(' \t\r\n ')).toBe('REQUIRED');
+  });
+
+  it('answers REQUIRED for a title of only no-break spaces', () => {
+    expect(checkTitle(`${NBSP}${NBSP}`)).toBe('REQUIRED');
+  });
+
+  it('accepts a title of only a zero-width space', () => {
+    expect(checkTitle(ZERO_WIDTH_SPACE)).toBeNull();
+  });
+
+  it('accepts 100 characters with spaces around them', () => {
+    expect(checkTitle(`  ${'a'.repeat(100)}  `)).toBeNull();
+  });
+
+  it('accepts 100 letters typed in NFD', () => {
+    expect(checkTitle(E_NFD.repeat(100))).toBeNull();
+  });
+
+  it('answers TOO_LONG for 101 letters typed in NFD', () => {
+    expect(checkTitle(E_NFD.repeat(101))).toBe('TOO_LONG');
+  });
+
+  it('accepts 50 × 👍🏽, which count 100 characters', () => {
+    expect(checkTitle(THUMBS_UP_MEDIUM_SKIN.repeat(50))).toBeNull();
+  });
+
+  it('answers TOO_LONG for 50 × 👍🏽 and one more letter', () => {
+    expect(checkTitle(`${THUMBS_UP_MEDIUM_SKIN.repeat(50)}a`)).toBe('TOO_LONG');
+  });
+
+  it('answers TOO_LONG for 20 × 👨‍👩‍👧 and one more letter', () => {
+    expect(checkTitle(`${FAMILY.repeat(20)}a`)).toBe('TOO_LONG');
+  });
+
+  it('accepts 50 × 🇻🇳, which count 100 characters', () => {
+    expect(checkTitle(FLAG_VN.repeat(50))).toBeNull();
+  });
+});
+
+describe('checkContent', () => {
+  it('accepts 0 characters', () => {
+    expect(checkContent('')).toBeNull();
+  });
+
+  it('accepts 1 character', () => {
+    expect(checkContent('a')).toBeNull();
+  });
+
+  it('accepts 1000 characters', () => {
+    expect(checkContent('a'.repeat(1000))).toBeNull();
+  });
+
+  it('answers TOO_LONG for 1001 characters', () => {
+    expect(checkContent('a'.repeat(1001))).toBe('TOO_LONG');
+  });
+
+  it('counts spaces at both ends, which it keeps', () => {
+    expect(checkContent(` ${'a'.repeat(999)} `)).toBe('TOO_LONG');
+  });
+
+  it('accepts 1000 × \\r\\n, which count 1000 characters', () => {
+    expect(checkContent('\r\n'.repeat(1000))).toBeNull();
+  });
+
+  it('answers TOO_LONG for 1001 × \\r\\n', () => {
+    expect(checkContent('\r\n'.repeat(1001))).toBe('TOO_LONG');
+  });
+
+  it('answers TOO_LONG for 1001 × a lone \\r', () => {
+    expect(checkContent('\r'.repeat(1001))).toBe('TOO_LONG');
+  });
+
+  it('accepts 1000 letters typed in NFD', () => {
+    expect(checkContent(E_NFD.repeat(1000))).toBeNull();
+  });
+
+  it('accepts 500 × 👍🏽, which count 1000 characters', () => {
+    expect(checkContent(THUMBS_UP_MEDIUM_SKIN.repeat(500))).toBeNull();
+  });
+
+  it('answers TOO_LONG for 200 × 👨‍👩‍👧 and one more letter', () => {
+    expect(checkContent(`${FAMILY.repeat(200)}a`)).toBe('TOO_LONG');
   });
 });

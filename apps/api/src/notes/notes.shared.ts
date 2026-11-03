@@ -21,3 +21,17 @@ export function normalizeContent(value: string): string {
 export function countChars(value: string): number {
   return Array.from(value.normalize('NFC')).length;
 }
+
+// Takes the raw value of the field and normalizes it first.
+export function checkTitle(value: string): 'REQUIRED' | 'TOO_LONG' | null {
+  const chars = countChars(normalizeTitle(value));
+  if (chars === 0) return 'REQUIRED';
+  return chars > TITLE_MAX_CHARS ? 'TOO_LONG' : null;
+}
+
+// Takes the raw value of the field and normalizes it first.
+export function checkContent(value: string): 'TOO_LONG' | null {
+  return countChars(normalizeContent(value)) > CONTENT_MAX_CHARS
+    ? 'TOO_LONG'
+    : null;
+}
