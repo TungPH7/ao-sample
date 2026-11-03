@@ -1,13 +1,28 @@
 @import "tailwindcss";
 
+/*
+ * Colours of design.md S1.1, checked by globals.test.ts against --background:
+ * --foreground, --muted (secondary text) and --error reach 4.5:1; --border (inputs, list dividers), --focus-ring and
+ * --accent reach 3:1; --background used as text on --accent (the Save button) reaches 4.5:1.
+ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --muted: #525252;
+  --error: #b91c1c;
+  --accent: #1d4ed8;
+  --border: #737373;
+  --focus-ring: #1d4ed8;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-error: var(--error);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-focus-ring: var(--focus-ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,6 +31,11 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --muted: #a3a3a3;
+    --error: #f87171;
+    --accent: #60a5fa;
+    --border: #737373;
+    --focus-ring: #60a5fa;
   }
 }
 
