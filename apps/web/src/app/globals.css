@@ -23,8 +23,6 @@
   --color-accent: var(--accent);
   --color-border: var(--border);
   --color-focus-ring: var(--focus-ring);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {

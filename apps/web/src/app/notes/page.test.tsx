@@ -1,6 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, test } from 'vitest';
-import { cleanup } from '@testing-library/react';
 import NotesPage from './page';
 
 afterEach(cleanup);
