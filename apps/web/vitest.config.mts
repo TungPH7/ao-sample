@@ -8,7 +8,8 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
+    // next.config.test.ts checks the rewrite target (ADR-0002).
+    include: ['src/**/*.test.{ts,tsx}', 'next.config.test.ts'],
     coverage: {
       provider: 'v8',
       // lcovonly writes coverage/lcov.info, which the CI of ai-orchestrator reads.

@@ -1,9 +1,16 @@
-import { render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, test } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import NotesPage from './page';
 
-afterEach(cleanup);
+// The view loads the list on mount; this file checks only the page frame, so the GET never answers.
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('the notes page', () => {
   test('has one h1 "Ghi chú" inside main', () => {
