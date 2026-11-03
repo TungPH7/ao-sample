@@ -101,6 +101,90 @@ describe('opening the page', () => {
   });
 });
 
+// design.md S1.11 and S1.15: exactly one of the skeleton, the list, the empty message and the load error.
+const EMPTY = 'Chưa có ghi chú nào.';
+const LOAD_ERROR = 'Không tải được danh sách ghi chú. Vui lòng thử lại.';
+
+function skeleton(): HTMLElement | null {
+  return document.querySelector('[aria-busy="true"]');
+}
+
+describe('the state of the list', () => {
+  test('shows three skeleton rows with no text while the GET is on its way', () => {
+    render(<NotesView />);
+
+    const busy = skeleton();
+    expect(busy?.children).toHaveLength(3);
+    expect(busy?.textContent).toBe('');
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('AC11 shows the list in place of the skeleton once the GET answers notes', async () => {
+    render(<NotesView />);
+    await settle(api.gets()[0], json({ data: [note('a', 'A')] }));
+
+    expect(listedTitles()).toEqual(['A']);
+    expect(skeleton()).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('AC10 shows "Chưa có ghi chú nào." as a status in place of the list when there is no note', async () => {
+    render(<NotesView />);
+    await settle(api.gets()[0], json({ data: [] }));
+
+    expect(screen.getByRole('status').textContent).toBe(EMPTY);
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(skeleton()).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('AC13 shows the load error as an alert, with a decorative icon, when the API answers 500', async () => {
+    render(<NotesView />);
+    await settle(api.gets()[0], json({}, 500));
+
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe(LOAD_ERROR);
+    expect(alert.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(skeleton()).toBeNull();
+  });
+
+  test('AC13 shows the load error when the network fails', async () => {
+    render(<NotesView />);
+    await settle(api.gets()[0], new TypeError('Failed to fetch'));
+
+    expect(screen.getByRole('alert').textContent).toBe(LOAD_ERROR);
+  });
+
+  test('AC13 shows the load error once 10 s pass without an answer, not before', async () => {
+    vi.useFakeTimers();
+    render(<NotesView />);
+
+    await act(() => vi.advanceTimersByTimeAsync(9_999));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(skeleton()).not.toBeNull();
+
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(screen.getByRole('alert').textContent).toBe(LOAD_ERROR);
+    expect(api.gets()[0].signal?.aborted).toBe(true);
+  });
+
+  test('replaces "Chưa có ghi chú nào." by the list when a note is saved', async () => {
+    render(<NotesView />);
+    await settle(api.gets()[0], json({ data: [] }));
+
+    save('Mua sữa');
+    await settle(api.posts()[0], json(note('n', 'Mua sữa'), 201));
+
+    expect(listedTitles()).toEqual(['Mua sữa']);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
 describe('saving while the list is ready', () => {
   test('sends one POST and puts the stored note first, with no new GET', async () => {
     render(<NotesView />);
@@ -214,8 +298,12 @@ describe('saving while the list failed to load', () => {
 
     expect(api.gets()).toHaveLength(2);
     expect(screen.queryByRole('list')).toBeNull();
+    // Decision 7: the load error stays while that GET is on its way, with no skeleton.
+    expect(screen.getByRole('alert').textContent).toBe(LOAD_ERROR);
+    expect(skeleton()).toBeNull();
     await settle(api.gets()[1], json({ data: [note('n', 'Mua sữa'), note('a', 'A')] }));
     expect(listedTitles()).toEqual(['Mua sữa', 'A']);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   test('keeps the saved note when the new GET answers without it', async () => {
@@ -238,6 +326,7 @@ describe('saving while the list failed to load', () => {
     await settle(api.gets()[1], json({}, 500));
 
     expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe(LOAD_ERROR);
     expect(api.gets()).toHaveLength(2);
   });
 

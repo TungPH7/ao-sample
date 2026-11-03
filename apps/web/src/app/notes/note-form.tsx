@@ -160,7 +160,7 @@ function FieldError({ id, message }: { id: string; message: string | null }) {
   );
 }
 
-function ErrorIcon({ className }: { className: string }) {
+export function ErrorIcon({ className }: { className: string }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className={`${className} shrink-0`}>
       <path
