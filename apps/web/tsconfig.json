@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@api/notes-shared": ["../api/src/notes/notes.shared.ts"]
     }
   },
   "include": [
