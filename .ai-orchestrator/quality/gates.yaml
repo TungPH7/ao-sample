@@ -86,6 +86,12 @@ security_review:
     - "**/*auth*.*"
     - "**/*session*.*"
     - "**/*crypto*.*"
+    # where data is read and written. Services are left out: most backend PRs change one, and would all be at max.
+    - "**/*.repository.*"
+    - "**/*.entity.*"
+    - "**/prisma/**"
+    - "**/migrations/**"
+    - "**/*.sql"
   lower_effort: high
 
 # The docs PR of an Epic (dev-workflow spec 2.4): every file it changes is under these paths, its head is this branch,

@@ -159,7 +159,8 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     headRef: pr.head.ref,
     headSha: head,
     base: pr.base.ref,
-    files: files.map(({ filename }) => filename),
+    // A renamed file by both names, as protectedPaths counts it: moved out of a risky path, it is still risky.
+    files: files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename])),
     protectedPaths: protectedPaths(files, gates),
     docsEpic: docsPullRequest({ pr, files, gates, apps, space }),
     ci: { green: checks.green, failed: checks.failed, pending: !checks.green && !checks.failed, started: checks.started },
