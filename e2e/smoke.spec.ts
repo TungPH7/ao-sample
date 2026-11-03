@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test('the home page opens', async ({ page }) => {
+test('the home page opens the notes page', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/notes$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Ghi chú' })).toBeVisible();
 });
 
 test('the API reports that it is up', async ({ request }) => {

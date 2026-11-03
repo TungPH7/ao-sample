@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { redirect } from 'next/navigation';
+import { expect, test, vi } from 'vitest';
 import Home from './page';
 
-test('the home page shows its heading', () => {
-  render(<Home />);
-  expect(screen.getByRole('heading', { level: 1 })).toBeDefined();
+vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
+
+test('the home page sends the user to /notes', () => {
+  Home();
+  expect(redirect).toHaveBeenCalledWith('/notes');
 });
