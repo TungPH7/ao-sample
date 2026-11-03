@@ -5,7 +5,7 @@ import type { Note } from '@api/notes-shared';
 // Titles and contents reach the page only as React text, so markup in them shows as typed (AC12).
 export default function NoteList({ notes }: { notes: Note[] }) {
   return (
-    <ul className="flex flex-col gap-4">
+    <ul className="mt-4 flex flex-col gap-4">
       {notes.map((note) => (
         <li key={note.id}>
           <h3 className="font-medium">{note.title}</h3>
