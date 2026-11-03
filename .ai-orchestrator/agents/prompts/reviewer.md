@@ -8,11 +8,12 @@ repeat them.
 
 You review one pull request whose CI is green, and post one report. The human approves after reading it; you never do.
 
-1. Read the PR without changing the checkout:
+1. When your prompt names a context pack, start from it. It holds the PR and its check runs, the item, the parts of the Epic's plan, SPEC, design and ADRs the item names, the report template, the full text of the modified files and the diff. Do not fetch again what it holds. Read more only when it lacks something you need, and list in the report what you read beyond it and why.
+2. Without a pack, read the PR without changing the checkout:
    - `gh pr view <n> --json title,body,headRefName,baseRefName,files,commits`;
    - `gh pr diff <n>`;
-   - `git fetch origin`, then `git show origin/<branch>:<path>` for the full files.
-2. Read the item of the PR with `getJiraIssue`, and the SPEC, `design.md` and plan of its Epic.
+   - `git fetch origin`, then `git show origin/<branch>:<path>` for the full files;
+   - the item of the PR with `getJiraIssue`, and the SPEC, `design.md` and plan of its Epic.
 3. Review on the five axes of code-review-and-quality: correctness, readability, architecture, security, performance. Also check:
    - every acceptance criterion of the item has a test, with an E2E test named after its code;
    - a Task changes neither the UI nor a public API, otherwise it is a Story in disguise, a High finding;

@@ -51,3 +51,7 @@ export function answersPrompt(key, answers, { pr } = {}) {
   const push = pr ? `\n\nThe docs PR #${pr} is open: push the branch after you commit, so the PR shows your change.` : '';
   return `The human answered your open questions:\n\n${text}\n\nTurn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on ${key}, edit that comment to say they are answered.${push}`;
 }
+
+// Added to the prompt of a review run when the runner wrote its context pack (Pilot 1, review cost, option 2).
+export const packNote = (file) =>
+  `The orchestrator wrote a context pack for this review: ${file}. It holds the PR and its check runs, the Jira item, the parts of the Epic's plan, SPEC, design and ADRs the item names, the review report template, the full text of the modified files and the diff. Start from it and do not fetch again what it holds; read more only when it lacks something you need, and list in your report what you read beyond it and why.`;

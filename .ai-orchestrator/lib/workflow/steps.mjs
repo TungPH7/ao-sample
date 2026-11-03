@@ -9,9 +9,10 @@
 //
 // options: { roster, contract, gates, mapping?, answers?, note? }. answers is your reply to the questions of the last run; note is what
 // you wrote after the PR number of /ao-fix.
+import { createHash } from 'node:crypto';
 import { answersPrompt, promptFor, resumePrompt } from './prompts.mjs';
 import { openQuestions } from './runs.mjs';
-import { securityScope } from './security-scope.mjs';
+import { fullReviewEffort, securityScope } from './security-scope.mjs';
 
 const ASKING = ['ba', 'ux', 'sa'];
 // A run that stopped before its end goes on in its session; one that failed counts towards the retry limit.
@@ -320,7 +321,10 @@ function reviewRuns(facts, options) {
   const runs = [];
   if (!pr.reports.reviewer?.onHead) runs.push({ role: 'reviewer', key: item.key, effort: options.roster.roles.reviewer.effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }) });
   const scope = securityScope({ report: pr.reports.security, full: pr.securityFull, compare: pr.securityCompare, gates: options.gates });
-  if (scope.mode === 'full') runs.push({ role: 'security', key: item.key, effort: options.roster.roles.security.effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), scope: scope.reason });
+  if (scope.mode === 'full') {
+    const { effort, reason } = fullReviewEffort({ files: pr.files ?? [], protectedPaths: pr.protectedPaths, item, gates: options.gates, rosterEffort: options.roster.roles.security.effort });
+    runs.push({ role: 'security', key: item.key, effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), scope: scope.reason, effortWhy: reason });
+  }
   if (scope.mode === 'delta') {
     runs.push({ role: 'security', key: item.key, effort: 'high', purpose: 'review-delta', prompt: promptFor('review-delta', { pr: pr.number, since: scope.since, at: scope.at }), scope: scope.reason });
   }
@@ -368,14 +372,16 @@ function decideFix(facts, options) {
   const { pr, item } = facts;
   const carried = carryOn('fix', facts, { ...options, answers: undefined });
   if (carried) return { ...carried, lines };
-  // A fix pushed by this command already: what is left is the reviews of the new head.
-  const fixRuns = (facts.run?.runs ?? []).filter((r) => r.command === 'fix');
-  const fixed = fixRuns.at(-1)?.purpose === 'fix' && fixRuns.at(-1).outcome === 'done' && fixRuns.at(-1).head !== pr.headSha;
+  // A fix of the same note pushed already: what is left is the reviews of the new head. The newest fix run counts, not
+  // the newest run of the command, which is a review once the reviewer ran (Pilot 1, PR #4 of ao-sample).
+  const asked = options.note?.trim() || undefined;
+  const lastFix = (facts.run?.runs ?? []).filter((r) => r.command === 'fix' && r.purpose === 'fix').at(-1);
+  const fixed = lastFix?.outcome === 'done' && lastFix.head !== pr.headSha && (lastFix.note ?? null) === (asked ? noteKey(asked) : null);
   const reasons = [];
   if (pr.changesRequested) reasons.push(`the changes requested on ${pr.headSha.slice(0, 7)}`);
   if (pr.ci.failed) reasons.push(`the red CI on ${pr.headSha.slice(0, 7)}`);
   for (const [role, report] of Object.entries(pr.reports)) if (report?.onHead && report.blocking > 0) reasons.push(`the ${report.blocking} Critical or High findings of the ${role} report`);
-  const note = fixed ? undefined : options.note?.trim() || undefined;
+  const note = fixed ? undefined : asked;
   if (note) reasons.push('what the human asks below');
   if (reasons.length === 0) {
     if (pr.ci.pending) return { ...stop(`CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number} once CI is done`), lines };
@@ -387,12 +393,17 @@ function decideFix(facts, options) {
   if (!role) return { ...stop(`${item.key} has no dev agent: no Agent value of a dev role, and no role label`, `Ask ba to label ${item.key}, then /ao-fix ${pr.number}`), lines };
   let effort = item.effort ?? options.roster.roles[role].effort;
   if (item.rework >= REWORK_FLOOR.count) effort = atLeast(effort, REWORK_FLOOR.effort);
-  const dev = { role, key: item.key, effort, purpose: 'fix', prompt: promptFor('fix', { pr: pr.number, key: item.key, branch: pr.headRef, reasons, note }), checkout: { branch: pr.headRef, pull: true }, head: pr.headSha };
+  const dev = { role, key: item.key, effort, purpose: 'fix', prompt: promptFor('fix', { pr: pr.number, key: item.key, branch: pr.headRef, reasons, note }), checkout: { branch: pr.headRef, pull: true }, head: pr.headSha, ...(note && { note: noteKey(note) }) };
   const reviews = [
     { role: 'reviewer', key: item.key, effort: options.roster.roles.reviewer.effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), when: 'the fix is pushed and CI is green' },
     { role: 'security', key: item.key, effort: 'high or max', purpose: 'review', prompt: '(decided after the fix: the new part only, or the whole PR)', when: 'the fix is pushed and CI is green' },
   ];
   return go([dev, ...reviews], lines);
+}
+
+// Which note a fix run was for, kept in state.json: the first 12 hex digits of its SHA-256.
+export function noteKey(note) {
+  return createHash('sha256').update(note.trim()).digest('hex').slice(0, 12);
 }
 
 const DECIDERS = { status: decideStatus, spec: decideSpec, plan: decidePlan, build: decideBuild, review: decideReview, fix: decideFix };

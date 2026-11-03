@@ -6,9 +6,11 @@
 //                                 of its stream-json log in .ai/runs/<KEY>/
 //   git(checkout)                 puts the checkout on a branch; resolves { ok, reason }
 //   dispatch(action)              asks GitHub to run jira-sync for an item (the second /ao-plan)
+//   pack(run, facts)              writes the context pack of a review run; resolves its path, or null (optional)
 //   store                         { readState(key), writeState(key, state), writeLast(key, text) }
 //   sleep(ms), now(), log(line)
 // Agents run one after another, never two at once.
+import { packNote } from './prompts.mjs';
 import { readRun } from './runs.mjs';
 import { decideStep } from './steps.mjs';
 
@@ -16,20 +18,23 @@ import { decideStep } from './steps.mjs';
 export const LIMITS = { maxRuns: 8, ciWaitMs: 30 * 60 * 1000, ciStartMs: 5 * 60 * 1000, syncWaitMs: 15 * 60 * 1000, pollMs: 30 * 1000 };
 // The most of an agent's answer state.json keeps; the whole answer stays in the run's log.
 const TEXT_MAX = 2000;
+const REVIEWS = ['review', 'review-delta'];
 
 // The command that starts one run: ao-agent.mjs with the role, the prompt, stream-json output, and the effort both as a
 // flag and as CLAUDE_CODE_EFFORT_LEVEL, which beats the flag and may be set in your environment (plan decision 6). It
 // carries no token: ao-agent.mjs buys the session's own.
+// CLAUDE_CODE_PROMPT_CACHE_TTL=5m: a run sends its requests seconds apart, so the five-minute cache is enough, and its
+// writes cost less than those of the one-hour cache that claude -p asks for on a subscription (Pilot 1, review of PR #4).
 export function agentCommand(run, kitDir) {
   const script = `${kitDir.replaceAll('\\', '/').replace(/\/+$/, '')}/scripts/ao-agent.mjs`;
   return {
     command: process.execPath,
     args: [script, run.role, '-p', run.prompt, '--output-format', 'stream-json', '--verbose', '--effort', run.effort, ...(run.resume ? ['--resume', run.resume] : [])],
-    env: { CLAUDE_CODE_EFFORT_LEVEL: run.effort },
+    env: { CLAUDE_CODE_EFFORT_LEVEL: run.effort, CLAUDE_CODE_PROMPT_CACHE_TTL: '5m' },
   };
 }
 
-export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
+export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
   const limits = { ...LIMITS, ...given };
   let facts = await gather();
   let decision = decide(command, facts, options);
@@ -69,7 +74,12 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     const resumed = next.resume ? state.runs.findLast((r) => r.session === next.resume) : undefined;
     log(`${n}. ${next.role} ${next.key} ${next.purpose}, effort ${next.effort}${next.resume ? ', resumes its session' : ''}`);
     const startedAt = new Date(now()).toISOString();
-    const { lines } = await agent(next, { log: logName });
+    // A review starts from the context pack of its PR (Pilot 1, review cost, option 2), written from the facts it was
+    // decided on; without one the agent fetches what it needs itself.
+    const file = pack && REVIEWS.includes(next.purpose) ? await pack(next, facts) : null;
+    const { lines } = await agent(file ? { ...next, prompt: `${next.prompt}
+
+${packNote(file)}` } : next, { log: logName });
     const read = readRun(lines, resumed);
     const record = {
       n,
@@ -92,6 +102,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       ...(next.resume && { resumed: true }),
       ...(next.checkout && { checkout: next.checkout }),
       ...(next.head && { head: next.head }),
+      ...(next.note && { note: next.note }),
       text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,
     };
     // state.json is written before anything else, so a stopped shell can go on from here.
@@ -153,7 +164,7 @@ export function formatDecision(decision) {
         out.push(`${i + 1}. jira-sync for ${run.key}, with your gh login${run.then?.mergeGate ? `; then merge-gate merges the docs PR #${run.then.mergeGate}` : ''}`);
         return;
       }
-      const extras = [run.resume && 'resumes its session', run.when && `when ${run.when}`, run.scope].filter(Boolean);
+      const extras = [run.resume && 'resumes its session', run.when && `when ${run.when}`, run.scope, run.effortWhy && `effort ${run.effort}: ${run.effortWhy}`].filter(Boolean);
       out.push(`${i + 1}. ${run.role} ${run.key}, ${run.purpose}, effort ${run.effort}${extras.length ? ` (${extras.join('; ')})` : ''}`);
     });
     return out.join('\n');
