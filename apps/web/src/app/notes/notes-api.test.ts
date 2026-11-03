@@ -45,10 +45,12 @@ describe('listNotes', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/notes');
     expect(init.method ?? 'GET').toBe('GET');
+    expect(init.cache).toBe('no-store');
   });
 
+  // The body is a valid list, so only the status can make the call fail.
   test.each([400, 404, 500, 503])('throws NotesRequestError on status %i', async (status) => {
-    fetchMock.mockResolvedValue(json({ error: { code: 'INTERNAL_ERROR' } }, status));
+    fetchMock.mockResolvedValue(json({ data: [NOTE] }, status));
     await expect(listNotes()).rejects.toBeInstanceOf(NotesRequestError);
   });
 
@@ -123,8 +125,9 @@ describe('createNote', () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: 'Mua sữa', content: '2 hộp' });
   });
 
+  // The body is a valid note, so only the status can make the call fail.
   test.each([400, 413, 415, 500])('throws NotesRequestError on status %i', async (status) => {
-    fetchMock.mockResolvedValue(json({ error: { code: 'VALIDATION_FAILED' } }, status));
+    fetchMock.mockResolvedValue(json(NOTE, status));
     await expect(createNote({ title: 'Mua sữa' })).rejects.toBeInstanceOf(NotesRequestError);
   });
 
