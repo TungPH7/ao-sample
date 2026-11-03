@@ -6,7 +6,7 @@
 //                                 of its stream-json log in .ai/runs/<KEY>/
 //   git(checkout)                 puts the checkout on a branch; resolves { ok, reason }
 //   dispatch(action)              asks GitHub to run jira-sync for an item (the second /ao-plan)
-//   pack(run, facts)              writes the context pack of a review run; resolves its path, or null (optional)
+//   pack(run, facts)              writes the context pack of a full review run; resolves its path, or null (optional)
 //   store                         { readState(key), writeState(key, state), writeLast(key, text) }
 //   sleep(ms), now(), log(line)
 // Agents run one after another, never two at once.
@@ -18,7 +18,9 @@ import { decideStep } from './steps.mjs';
 export const LIMITS = { maxRuns: 8, ciWaitMs: 30 * 60 * 1000, ciStartMs: 5 * 60 * 1000, syncWaitMs: 15 * 60 * 1000, pollMs: 30 * 1000 };
 // The most of an agent's answer state.json keeps; the whole answer stays in the run's log.
 const TEXT_MAX = 2000;
-const REVIEWS = ['review', 'review-delta'];
+// Only a full review gets a pack: the pack holds the diff of the whole PR, and a review of the new part (review-delta)
+// reads the diff since its last report (Pilot 1, review of ao-sample PR #6).
+const PACKED = ['review'];
 
 // The command that starts one run: ao-agent.mjs with the role, the prompt, stream-json output, and the effort both as a
 // flag and as CLAUDE_CODE_EFFORT_LEVEL, which beats the flag and may be set in your environment (plan decision 6). It
@@ -76,7 +78,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     const startedAt = new Date(now()).toISOString();
     // A review starts from the context pack of its PR (Pilot 1, review cost, option 2), written from the facts it was
     // decided on; without one the agent fetches what it needs itself.
-    const file = pack && REVIEWS.includes(next.purpose) ? await pack(next, facts) : null;
+    const file = pack && PACKED.includes(next.purpose) ? await pack(next, facts) : null;
     const { lines } = await agent(file ? { ...next, prompt: `${next.prompt}
 
 ${packNote(file)}` } : next, { log: logName });

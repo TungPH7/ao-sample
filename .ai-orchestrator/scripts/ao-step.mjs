@@ -9,7 +9,7 @@
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
@@ -32,7 +32,8 @@ const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|spec|pla
 const kitDir = resolve(process.env.AO_KIT_DIR ?? fileURLToPath(new URL('..', import.meta.url)));
 const projectDir = process.cwd();
 const runsDir = join(projectDir, '.ai', 'runs');
-const git = (...args) => spawnSync('git', args, { cwd: projectDir, encoding: 'utf8' });
+// maxBuffer: the full text of a file or a diff may pass the 1 MiB default, which ends git with ENOBUFS and no output.
+const git = (...args) => spawnSync('git', args, { cwd: projectDir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
 // The argument of a command, checked before it reaches anything: a key of the project space, or a PR number. The
 // skill passes only this word, which Claude Code puts in the shell line as it is (T1).
@@ -197,63 +198,79 @@ function startAgent(run, logFile) {
   });
 }
 
-// Puts the checkout on `branch` before a run: from origin when it is there, else new from origin/<from>. A checkout with
-// changes is left alone.
-// The context pack of a review run (Pilot 1, review cost, option 2): read from git, GitHub and Jira at the PR head and
-// written to .ai/reviews/<PR>-context.md. Any failure leaves the run without a pack: the agent then fetches what it
-// needs itself, as before.
-export function reviewPackWriter({ github, jira }) {
-  return async (run, facts) => {
+// The context pack of a review run (Pilot 1, review cost, option 2): the PR, its files and diff at its head; the Epic's
+// documents and the review report template at the merge base, as approved at gate ② (review of ao-sample PR #6: a dev
+// agent may change docs/ in its own PR); written to .ai/reviews/<PR>-context.md. git, github and jira are parameters,
+// for tests. Any failure leaves the run without a pack: the agent then fetches what it needs itself, as before.
+export function reviewPackWriter({ github, jira, git: run = git, projectDir: dir = projectDir, kitDir: kit = kitDir, save = savePack(dir), log = console.log }) {
+  return async (_run, facts) => {
     const { pr, item } = facts;
     try {
-      git('fetch', '--quiet', 'origin', pr.base, pr.headRef);
+      const need = (...args) => {
+        const result = run(...args);
+        if (result.status !== 0) throw new Error(`git ${args[0]} failed: ${(result.stderr || result.error?.message || '').trim()}`);
+        return result.stdout;
+      };
+      // The PR by its number: its branch name is the author's, and one starting with - would read as an option.
+      need('fetch', '--quiet', 'origin', `refs/heads/${pr.base}`, `refs/pull/${pr.number}/head`);
       const head = pr.headSha;
-      const baseSha = git('merge-base', `origin/${pr.base}`, head).stdout.trim();
+      const baseSha = need('merge-base', `origin/${pr.base}`, head).trim();
       if (!baseSha) throw new Error(`no merge base of origin/${pr.base} and ${head.slice(0, 7)}`);
-      const show = (path) => {
-        const shown = git('show', `${head}:${path}`);
+      const show = (sha, path) => {
+        const shown = run('show', `${sha}:${path}`);
         return shown.status === 0 ? shown.stdout : null;
       };
       const range = `${baseSha}...${head}`;
-      const files = git('diff', '--name-status', range).stdout.trim().split('\n').filter(Boolean).map((line) => {
+      const files = need('diff', '--name-status', range).trim().split('\n').filter(Boolean).map((line) => {
         const [status, ...paths] = line.split('\t');
-        return { status, path: paths.at(-1) };
+        return paths.length > 1 ? { status, from: paths[0], path: paths[1] } : { status, path: paths[0] };
       });
-      const modified = files.filter(({ status }) => status.startsWith('M')).map(({ path }) => ({ path, text: show(path) ?? '' }));
+      const modified = files.filter(({ status }) => status.startsWith('M')).map(({ path }) => ({ path, text: show(head, path) }));
       const epic = item.parent && /epic/i.test(item.parent.type) ? item.parent.key : null;
-      const adrs = git('ls-tree', '--name-only', head, 'docs/adr/').stdout.trim().split('\n').filter((name) => name.endsWith('.md'));
       const docs = epic && {
         epic,
-        plan: show(`docs/specs/${epic}/plan.md`),
-        spec: show(`docs/specs/${epic}/spec.md`),
-        design: show(`docs/specs/${epic}/design.md`),
-        adrs: adrs.map((path) => ({ name: path.split('/').at(-1), text: show(path) ?? '' })),
+        plan: show(baseSha, `docs/specs/${epic}/plan.md`),
+        spec: show(baseSha, `docs/specs/${epic}/spec.md`),
+        design: show(baseSha, `docs/specs/${epic}/design.md`),
+        adrs: need('ls-tree', '--name-only', baseSha, 'docs/adr/').trim().split('\n').filter((name) => name.endsWith('.md'))
+          .map((path) => ({ name: path.split('/').at(-1), text: show(baseSha, path) ?? '' })),
       };
+      // The kit inside the project is one of the PR's paths, so its template is read at the base too.
+      const kitPath = relative(dir, kit).replaceAll('\\', '/');
+      const inside = kitPath !== '' && !kitPath.startsWith('..') && !isAbsolute(kitPath);
+      const template = (inside && show(baseSha, `${kitPath}/templates/review-report.md`)) || readFileSync(join(kit, 'templates', 'review-report.md'), 'utf8');
       const runs = await github.get(`/commits/${head}/check-runs`, { per_page: 100 });
       const issue = await jira.get(`/rest/api/3/issue/${encodeURIComponent(item.key)}`, { fields: 'description' });
+      const diff = run('diff', range);
       const text = buildReviewPack({
         pr: { ...pr, baseSha },
         checks: (runs.check_runs ?? []).map(({ name, status, conclusion }) => `${name}: ${conclusion ?? status}`),
         item: { ...item, parent: item.parent?.key ?? null, links: (item.blockedBy ?? []).map((key) => `is blocked by ${key}`), description: adfText(issue.fields?.description) },
         docs,
-        template: readFileSync(join(kitDir, 'templates', 'review-report.md'), 'utf8'),
+        template,
         files,
         modified,
-        diff: git('diff', range).stdout,
-        stat: git('diff', '--stat', range).stdout,
+        diff: diff.status === 0 ? diff.stdout : null,
+        stat: need('diff', '--stat', range),
       });
       const name = `.ai/reviews/${pr.number}-context.md`;
-      mkdirSync(join(projectDir, '.ai', 'reviews'), { recursive: true });
-      writeFileSync(join(projectDir, name), text);
-      console.log(`context pack ${name}: ${text.length} characters`);
+      save(name, text);
+      log(`context pack ${name}: ${text.length} characters`);
       return name;
     } catch (error) {
-      console.log(`no context pack for PR #${pr.number} (${error.message}); the agent fetches what it needs itself`);
+      log(`no context pack for PR #${pr.number} (${error.message}); the agent fetches what it needs itself`);
       return null;
     }
   };
 }
 
+const savePack = (dir) => (name, text) => {
+  mkdirSync(join(dir, '.ai', 'reviews'), { recursive: true });
+  writeFileSync(join(dir, name), text);
+};
+
+// Puts the checkout on `branch` before a run: from origin when it is there, else new from origin/<from>. A checkout with
+// changes is left alone.
 function prepareCheckout({ branch, from, pull }) {
   const dirty = git('status', '--porcelain', '--untracked-files=no').stdout.trim();
   if (dirty) return { ok: false, reason: `the checkout has changes not committed (${dirty.split('\n').length} files): commit or stash them, then run the command again` };
