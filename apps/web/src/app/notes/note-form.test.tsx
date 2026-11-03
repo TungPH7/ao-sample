@@ -412,6 +412,26 @@ describe('the error of Tiêu đề, while typing', () => {
     expect(errorOf(title)).toBeNull();
   });
 
+  test('does not show "Vui lòng nhập tiêu đề" again when a title typed after it is emptied', () => {
+    const { title } = renderForm();
+    fireEvent.blur(title);
+    type(title, 'M');
+
+    type(title, '');
+
+    expect(errorOf(title)).toBeNull();
+  });
+
+  test('does not show "Vui lòng nhập tiêu đề" again when a too long title typed after it is emptied', () => {
+    const { title } = renderForm();
+    fireEvent.blur(title);
+    type(title, 'a'.repeat(101));
+
+    type(title, '');
+
+    expect(errorOf(title)).toBeNull();
+  });
+
   test('keeps "Vui lòng nhập tiêu đề" while the title stays empty or blank', () => {
     const { title } = renderForm();
     fireEvent.blur(title);
