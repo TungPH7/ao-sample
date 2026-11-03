@@ -73,7 +73,9 @@ test('AC2 saves a note with an empty content and shows it first in the list', as
 
   const first = firstNote(page);
   await expect(first.getByRole('heading', { level: 3 })).toHaveText(title);
-  await expect(first).toHaveText(title);
+  // design.md S1.14: with an empty content, the item has only its title [12] and its creation time [13].
+  await expect(first.locator('p')).toHaveCount(0);
+  await expect(first).toHaveText(title + (await first.locator('time').textContent()));
   expect(await storedWithTitle(request, title)).toEqual([expect.objectContaining({ content: '' })]);
 });
 
