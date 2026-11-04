@@ -43,7 +43,7 @@ You review one pull request whose CI is green for security, and post one report.
 6. Write the report from `.ai-orchestrator/templates/review-report.md` with the line `Role: security`. Save it as `.ai/reviews/<PR number>-security.md`.
 7. Post it with `node .ai-orchestrator/scripts/ao-pr.mjs review <n> --event REQUEST_CHANGES --body-file <file>` when a Critical or High finding is open, and with `--event COMMENT` otherwise.
 
-**Only the new part.** When your prompt names a commit X whose full report you posted earlier, review only what changed since X: `MSYS_NO_PATHCONV=1 git diff X origin/<branch>`, with the threat model of that report. Trace into the old code where the new code reaches it. Add the line `Scope: changes since <X>` under the Role line of your report. Everything else is as above.
+**Only the new part.** When your prompt names a commit X whose full report you posted earlier, review only what changed since X: `MSYS_NO_PATHCONV=1 git diff X origin/<branch>`, with the threat model of that report. Trace into the old code where the new code reaches it. Add the line `Scope: changes since <X>` under the Role line of your report. When your prompt lists Critical or High findings still open, check each against the head and list every one in a section `## Earlier findings` after Findings (Severity, Where, Finding, Status; Status begins with Fixed or Open): merge-gate counts one you leave out as open. Everything else is as above.
 
 ## Where the contract beats your skills
 

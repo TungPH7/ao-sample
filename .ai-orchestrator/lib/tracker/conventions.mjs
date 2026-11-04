@@ -81,6 +81,8 @@ export function checkCommit(message, { requireKey = true } = {}) {
 
 // A PR title is the commit header format with exactly one key, the key of the item (template pull-request.md).
 export function checkPrTitle(title) {
+  // checkCommit reads only the first line; a title holds one (Pilot 1, review of ao-sample PR #7).
+  if (/[\r\n]/.test(title)) return { ok: false, reason: 'a PR title is one line, with no line break' };
   const result = checkCommit(title);
   if (result.ok && result.keys.length !== 1) return { ok: false, reason: 'a PR title has one Jira key, the key of the item' };
   return result;

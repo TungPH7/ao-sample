@@ -1,5 +1,6 @@
 // The floor guard of the policy job (quality-gates spec section 2.4): added lines that switch a check off, deleted test
 // files, and quality/gates.yaml thresholds a PR lowers. Pure: scripts/check-policy.mjs runs git.
+import { diffLines } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
 
 // Documentation may name a suppression without using one, and the kit copy is a protected path anyway.
@@ -8,17 +9,16 @@ const NOT_CHECKED = ['**/*.md', '.ai-orchestrator/**'];
 const TEST_FILE = ['**/*.{test,spec}.*', '**/*.e2e-spec.*', 'e2e/**'];
 const LEVELS = ['info', 'low', 'moderate', 'high', 'critical'];
 
-// [{ file, line, text }] for every line a zero-context `git diff` adds.
+// [{ file, line, text }] for every line a zero-context `git diff` adds. A path git quotes is read as it is on disk.
 export function addedLines(diff) {
   const added = [];
   let file = null;
   let line = 0;
-  for (const text of diff.split(/\r?\n/)) {
-    const target = text.match(/^\+\+\+ (?:b\/(.*)|\/dev\/null)$/);
-    const hunk = text.match(/^@@ -\S+ \+(\d+)(?:,\d+)? @@/);
-    if (target) file = target[1] ?? null;
-    else if (hunk) line = Number(hunk[1]);
-    else if (file && text.startsWith('+')) added.push({ file, line: line++, text: text.slice(1) });
+  for (const part of diffLines(diff)) {
+    if (part.kind === 'file') file = null;
+    else if (part.kind === 'header') file = part.side === '+++' ? part.path : file;
+    else if (part.kind === 'hunk') line = part.start;
+    else if (file && part.text.startsWith('+')) added.push({ file, line: line++, text: part.text.slice(1) });
   }
   return added;
 }
@@ -38,7 +38,13 @@ export function findSuppressions(added, { reason_marker: marker, patterns, never
 
 // Test files the diff deletes; the policy job lists them for the reviewer rather than failing.
 export function deletedTests(diff) {
-  return [...diff.matchAll(/^--- a\/(.+)\n\+\+\+ \/dev\/null$/gm)].map(([, file]) => file).filter((file) => TEST_FILE.some((glob) => matchesGlob(glob, file)));
+  const deleted = [];
+  let from = null;
+  for (const part of diffLines(diff)) {
+    if (part.kind === 'header' && part.side === '+++' && from && part.path === null) deleted.push(from);
+    from = part.kind === 'header' && part.side === '---' ? part.path : null;
+  }
+  return deleted.filter((file) => TEST_FILE.some((glob) => matchesGlob(glob, file)));
 }
 
 // What a PR loosens in quality/gates.yaml, comparing the base version with its own.

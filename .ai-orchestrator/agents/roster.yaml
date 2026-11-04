@@ -2,13 +2,16 @@
 # each role into .claude/agents/<role>.md, with agents/prompts/<role>.md and the contract. Rules A1 to A5 of
 # `npm run validate` check this file. Changing a model, an effort or a skill is your decision (spec section 8).
 
-# Rovo MCP tools behind each Jira permission. executeWrite and executeDestructive go around the transition hook, so
-# no permission grants them.
+# Rovo MCP tools behind each Jira permission. executeWrite and executeDestructive run any operation by name, a way
+# around the transition hook, so block-atlassian refuses them, but for one operation: link grants executeWrite only for
+# createJiraIssueLink, a Blocks link between two items of the project space (the server has no tool of its own for
+# it; Pilot 1, T10). No permission grants executeDestructive.
 jira_tools:
   read: [getJiraIssue, searchJiraIssuesUsingJql, executeRead]
   create: [createJiraIssue]
   edit: [editJiraIssue]
   comment: [addOrEditJiraIssueComment]
+  link: [executeWrite]
   transition: [transitionJiraIssue]
 
 # MCP tools an agent may get, by server and group. Chrome DevTools MCP 1.12.0, from its tool reference (T2). The
@@ -44,7 +47,7 @@ vendored_skills:
   - { name: gha-security-review, repo: getsentry/skills, path: skills/gha-security-review, commit: b11ee5163295996fa6449c4842749811c82ac77c }
 
 # Every agent also has Read, Glob and Grep. No agent has Skill, Agent, WebFetch or WebSearch (spec 2.3).
-# tools: Bash, Edit, Write. jira: read, create, edit, comment, transition. git: read or write (read only: spec 2.10).
+# tools: Bash, Edit, Write. jira: read, create, edit, comment, link, transition. git: read or write (read only: spec 2.10).
 # writes: the files Edit and Write may touch; the protected paths of quality/gates.yaml still apply. max_turns: twice
 # the most model turns of a live run of the role, rounded up to tens (spec 2.2; runs of tasks/archive/agent-roster/
 # verification.md). The most of fe-dev, 130, is its run at max, so a run raised for a hard item still fits.
@@ -65,7 +68,7 @@ roles:
     effort: xhigh
     max_turns: 90
     tools: [Bash, Edit, Write]
-    jira: [read, create, edit, comment]
+    jira: [read, create, edit, comment, link]
     git: write
     writes: ["docs/specs/**", "CHANGELOG.md", ".ai/**"]
     skills: [spec-driven-development, interview-me]

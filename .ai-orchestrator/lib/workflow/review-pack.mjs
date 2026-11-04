@@ -98,7 +98,22 @@ export function quoted(source, text, lang = '') {
 }
 
 const short = (sha) => sha.slice(0, 7);
-const fileLine = ({ status, path, from }) => (from ? `${status} ${from} → ${path}` : `${status} ${path}`);
+// A path as the pack shows it. git allows a newline or another control character in a file name, and ao-step reads the
+// names as they are on disk, so a name could start a line of the pack that passes for one of its headings: each such
+// character is written as an escape (\n, \u001b).
+const ESCAPED = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
+const shown = (path) => path.replace(/[\u0000-\u001f\u007f]/g, (c) => ESCAPED[c] ?? `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+const fileLine = ({ status, path, from }) => (from ? `${status} ${shown(from)} → ${shown(path)}` : `${status} ${shown(path)}`);
+// Text of one line outside a quoted block, such as the PR title or a check run name: its line breaks and other spaces
+// become one space, so it cannot start a line of the pack (Pilot 1, review of ao-sample PR #7).
+const oneLine = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
+
+// The files of `git diff --name-status` whose full text the pack quotes, at their path in the head: a modified file, a
+// file whose type changed, and a renamed or copied file that changed too (R085, C090; R100 is the same file). An added
+// file is whole in the diff; a deleted one has no head.
+export function filesToQuote(files) {
+  return files.filter(({ status }) => /^[MT]/.test(status) || /^[RC](?!100)\d*$/.test(status)).map(({ path }) => path);
+}
 
 // The pack. pr: { number, title, body, headRef, base, headSha, baseSha }; checks: ["name: conclusion"]; item: { key,
 // type, summary, status, labels, parent, links, description }; docs: { epic, plan, spec, design, adrs: [{ name, text }] }
@@ -113,16 +128,16 @@ export function buildReviewPack({ pr, checks, item, docs, template, files, modif
   const part = (heading, lines) => sections.push({ heading, lines });
 
   part('Pull request', [
-    `- #${pr.number} ${pr.title}; ${pr.headRef} → ${pr.base}; base ${pr.baseSha}, head ${pr.headSha}`,
+    `- #${pr.number} ${oneLine(pr.title)}; ${oneLine(pr.headRef)} → ${oneLine(pr.base)}; base ${pr.baseSha}, head ${pr.headSha}`,
     `- Files: ${files.map(fileLine).join(', ')}`,
-    `- Check runs on the head: ${checks.length > 0 ? checks.join('; ') : 'none'}`,
+    `- Check runs on the head: ${checks.length > 0 ? checks.map(oneLine).join('; ') : 'none'}`,
     '',
     '### Description',
     '',
     ...quoted(`The description of PR #${pr.number}, written by the PR author`, (pr.body ?? '').trim() || '(empty)', 'markdown'),
   ]);
   part(`Jira item ${item.key}`, [
-    `- ${item.type} "${item.summary}", status ${item.status}, labels ${item.labels.join(', ') || 'none'}, parent ${item.parent ?? 'none'}, links: ${item.links.join(', ') || 'none'}`,
+    `- ${item.type} "${oneLine(item.summary)}", status ${item.status}, labels ${item.labels.join(', ') || 'none'}, parent ${item.parent ?? 'none'}, links: ${item.links.join(', ') || 'none'}`,
     '',
     ...quoted(`The description of ${item.key}, written by Jira users`, item.description.trim() || '(no description)', 'markdown'),
   ]);
@@ -154,20 +169,33 @@ export function buildReviewPack({ pr, checks, item, docs, template, files, modif
   return `${out.join('\n').replace(/\n+$/, '')}\n`;
 }
 
+// A word of a shell command the pack gives in its own words, such as a file name the PR chose: in single quotes, where
+// the shell expands nothing, with each ' written '\'' (second review of ao-sample PR #13: `$(…)` in a name would run).
+const singleQuoted = (word) => `'${word.replaceAll("'", "'\\''")}'`;
+
+// The lines of a text, the last one counted once whether or not it ends with a line break.
+const lineCount = (text) => text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
+// Names of files that hold text: one with a NUL byte is still code or data the PR runs (Pilot 1, review of ao-sample
+// PR #7). git calls it binary, so its diff above is one line and the review must read it at the head.
+const TEXT_FILE = /\.(?:[cm]?[jt]sx?|json|ya?ml|md|css|scss|html?|sql|sh|ps1|py|prisma|env|txt|toml|ini)$/i;
+const binaryWhy = (path, read) => (TEXT_FILE.test(path)
+  ? `it has a NUL byte, so git treats it as binary and the diff above does not show its changes, though its name is that of a text file. Read it before you approve: ${read.replace(/^Read it with /, '')}`
+  : `a binary file. If it is text, ${read.charAt(0).toLowerCase()}${read.slice(1)}`);
+
 // The modified files at the head, after the diff: whole, unless the file is a lockfile, a binary, unreadable, longer
 // than maxFileLines, or would take the full text past maxFullTextChars; such a file is named, with how to read it.
 // Added files are whole in the diff.
 function fullText(modified, { head, maxFullTextChars, maxFileLines }) {
   const out = ['Added files are whole in the diff above.', ''];
   let used = 0;
-  for (const { path, text } of modified) {
-    const read = `Read it with \`MSYS_NO_PATHCONV=1 git show ${head}:${path}\`.`;
-    const lines = text?.split('\n').length - (text?.endsWith('\n') ? 1 : 0);
+  for (const { path: onDisk, text } of modified) {
+    const path = shown(onDisk);
+    const read = `Read it with \`MSYS_NO_PATHCONV=1 git show ${singleQuoted(`${head}:${path}`)}\`.`;
     let why = null;
     if (LOCKFILE.test(path)) why = 'a lockfile; its changes are in the diff.';
     else if (text === null) why = `git could not read it at the head. ${read}`;
-    else if (text.includes('\u0000')) why = 'a binary file.';
-    else if (lines > maxFileLines) why = `${lines} lines, over ${maxFileLines}. ${read}`;
+    else if (text.includes('\u0000')) why = binaryWhy(path, read);
+    else if (lineCount(text) > maxFileLines) why = `${lineCount(text)} lines, over ${maxFileLines}. ${read}`;
     else if (used + text.length > maxFullTextChars) why = `with it the full text would pass ${maxFullTextChars} characters. ${read}`;
     if (why) {
       out.push(`### \`${path}\``, '', `Not quoted: ${why}`, '');
@@ -188,7 +216,7 @@ function epicPart(item, docs, files, base) {
   const at = (file) => `\`${file}\` at the base ${base}`;
   const [planFile, specFile, designFile] = ['plan', 'spec', 'design'].map((name) => `docs/specs/${docs.epic}/${name}.md`);
   const entry = docs.plan ? planEntry(docs.plan, item.summary) : null;
-  if (!entry) out.push(`No Task List entry of \`${planFile}\` has the title "${item.summary}": read the plan for this item.`, '');
+  if (!entry) out.push(`No Task List entry of \`${planFile}\` has the title "${oneLine(item.summary)}": read the plan for this item.`, '');
   else out.push(`### Plan entry (\`${planFile}\`)`, '', ...quoted(at(planFile), entry, 'markdown'));
   const paths = files.map(({ path }) => path);
   const contract = docs.plan ? contractSections(docs.plan, paths) : [];

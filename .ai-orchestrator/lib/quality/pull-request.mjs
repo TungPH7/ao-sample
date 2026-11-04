@@ -48,6 +48,7 @@ export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 // Findings that block the merge (templates/review-report.md).
 const BLOCKING = ['Critical', 'High'];
 const FINDING_COLUMNS = ['severity', 'axis', 'where', 'finding', 'fix'];
+const EARLIER_COLUMNS = ['severity', 'where', 'finding', 'status'];
 
 // A review report as merge-gate reads it: the role of its Role line, the rows of its Findings table, and those that
 // block the merge. Text that is not a report has no role; a report merge-gate cannot read lists problems.
@@ -58,19 +59,40 @@ export function readReviewReport(body, roles) {
   if (!('Findings' in found)) return { ok: false, role: header.role, problems: ['the report needs a "## Findings" section'] };
   const findings = [];
   const problems = [];
-  const rows = found.Findings.split('\n')
-    .filter((line) => line.trim().startsWith('|'))
-    .map((line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
-    // The header and separator rows.
-    .filter((cells) => cells[0].toLowerCase() !== 'severity' && !cells.every((cell) => /^:?-+:?$/.test(cell)));
-  rows.forEach((cells, index) => {
+  const read = (section, columns, name) => tableRows(section).flatMap((cells, index) => {
     const severity = SEVERITIES.find((s) => s.toLowerCase() === cells[0].replace(/[*_`]/g, '').trim().toLowerCase());
-    if (severity) findings.push(Object.fromEntries(FINDING_COLUMNS.map((column, i) => [column, i === 0 ? severity : cells[i]])));
-    else problems.push(`finding ${index + 1}: severity '${cells[0]}' is not Critical, High, Medium or Low`);
+    if (severity) return [Object.fromEntries(columns.map((column, i) => [column, i === 0 ? severity : cells[i]]))];
+    problems.push(`${name} ${index + 1}: severity '${cells[0]}' is not Critical, High, Medium or Low`);
+    return [];
   });
+  findings.push(...read(found.Findings, FINDING_COLUMNS, 'finding'));
   // A security review of the new part only says from which commit (dev-workflow spec 2.6).
   const since = body.match(/^Scope:\s*changes since\s+([0-9a-f]{7,40})\s*$/m)?.[1];
-  return { ok: problems.length === 0, role: header.role, findings, blocking: findings.filter(({ severity }) => BLOCKING.includes(severity)), problems, ...(since && { scope: { since } }) };
+  // ... and lists the Critical and High findings left open before it, each Fixed or Open. A full review judges anew.
+  const earlier = 'Earlier findings' in found ? read(found['Earlier findings'], EARLIER_COLUMNS, 'earlier finding') : [];
+  const stillOpen = since ? earlier.filter(({ severity, status }) => BLOCKING.includes(severity) && !/^fixed\b/i.test(status ?? '')) : [];
+  const blocking = [...findings.filter(({ severity }) => BLOCKING.includes(severity)), ...stillOpen];
+  return { ok: problems.length === 0, role: header.role, findings, blocking, problems, ...(since && { scope: { since } }), ...(earlier.length > 0 && { earlier }) };
+}
+
+// The rows of a Markdown table as cells, without its header and separator rows.
+const tableRows = (section) => section.split('\n')
+  .filter((line) => line.trim().startsWith('|'))
+  .map((line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
+  .filter((cells) => cells[0].toLowerCase() !== 'severity' && !cells.every((cell) => /^:?-+:?$/.test(cell)));
+
+// The number of Critical and High findings open after each report of one role, oldest first (dev-workflow spec 2.6;
+// Pilot 1, second review of ao-sample PR #13). A full report counts its own. A report of the new part counts its own
+// and the earlier ones it lists as Open, and the open ones of the report before it that it does not list: an agent that
+// leaves one out does not clear it. An unreadable report clears nothing. reports: readReviewReport results.
+export function openCounts(reports) {
+  let before = 0;
+  return reports.map((report) => {
+    if (!report.ok) return before;
+    const listed = report.scope ? (report.earlier ?? []).filter(({ severity }) => BLOCKING.includes(severity)).length : 0;
+    before = report.blocking.length + (report.scope ? Math.max(0, before - listed) : 0);
+    return before;
+  });
 }
 
 // The first heading and the Role line that tell merge-gate which role wrote a review report.
