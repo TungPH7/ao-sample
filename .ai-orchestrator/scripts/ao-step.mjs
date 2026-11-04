@@ -26,6 +26,7 @@ import { readMapping } from '../lib/tracker/mapping.mjs';
 import { startAgentProcess, killTree } from '../lib/workflow/agent-process.mjs';
 import { gatherFacts } from '../lib/workflow/facts.mjs';
 import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-pack.mjs';
+import { removeInstructions } from '../lib/workflow/review-tree.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
 import { decideStep } from '../lib/workflow/steps.mjs';
 
@@ -286,8 +287,10 @@ function prepareCheckout({ branch, from, pull }) {
 }
 
 // The worktree of a PR for its review (Pilot 1, T10): the code at the head the review is on, in .ai/reviews/pr-<N>, which
-// is never committed. A stale one from a run that was stopped is replaced. Node finds node_modules above it, in the
-// checkout, so the tests of the PR run there.
+// is never committed. A stale one from a run that was stopped is replaced. The PR's instruction files (CLAUDE.md,
+// .claude/) are removed from it at once, since Claude Code would load them when the agent reads a file there (review of
+// ao-sample PR #13). Node finds the node_modules of the checkout's root above it; a workspace's own node_modules, such as
+// apps/web/node_modules, it does not find, so the tests of that workspace may not run there.
 const worktreePath = (name) => join('.ai', 'reviews', name);
 function addWorktree({ name, sha }) {
   const path = worktreePath(name);
@@ -295,6 +298,12 @@ function addWorktree({ name, sha }) {
   mkdirSync(join(projectDir, '.ai', 'reviews'), { recursive: true });
   const added = git('worktree', 'add', '--detach', '--quiet', path, sha);
   if (added.status !== 0) return { ok: false, reason: `git could not add the worktree of ${name} at ${sha.slice(0, 7)}: ${(added.stderr || added.stdout).trim()}` };
+  try {
+    removeInstructions(join(projectDir, path), { readdirSync, rmSync });
+  } catch (error) {
+    removeWorktree({ name });
+    return { ok: false, reason: `the instruction files of the PR could not be removed from its worktree: ${error.message}` };
+  }
   return { ok: true, path: path.replaceAll('\\', '/') };
 }
 

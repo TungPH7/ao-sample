@@ -1,7 +1,7 @@
 // Coverage of the lines a PR adds or changes (quality-gates spec section 2.4): the lcov files of the tests intersected
 // with a zero-context git diff. Only lines lcov lists count, since only those can run. Pure: scripts/coverage-diff.mjs
 // runs git and finds the lcov files.
-import { headerPath } from './diff-paths.mjs';
+import { diffLines } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
 
 const slashes = (path) => path.replaceAll('\\', '/');
@@ -47,17 +47,13 @@ export function parseLcov(text, { lcovDir, root }) {
 export function changedLines(diff) {
   const changed = new Map();
   let lines = null;
-  for (const line of diff.split(/\r?\n/)) {
-    const header = headerPath(line);
-    if (header?.side === '+++') {
-      lines = header.path === null ? null : [];
-      if (lines) changed.set(header.path, lines);
-      continue;
-    }
-    const hunk = line.match(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/);
-    if (hunk && lines) {
-      const [start, count = 1] = [Number(hunk[1]), hunk[2] === undefined ? 1 : Number(hunk[2])];
-      for (let n = start; n < start + count; n++) lines.push(n);
+  for (const part of diffLines(diff)) {
+    if (part.kind === 'file') lines = null;
+    else if (part.kind === 'header' && part.side === '+++') {
+      lines = part.path === null ? null : [];
+      if (lines) changed.set(part.path, lines);
+    } else if (part.kind === 'hunk' && lines) {
+      for (let n = part.start; n < part.start + part.count; n++) lines.push(n);
     }
   }
   return changed;

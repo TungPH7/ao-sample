@@ -10,6 +10,8 @@
 // options: { roster, contract, gates, mapping?, answers?, note? }. answers is your reply to the questions of the last run; note is what
 // you wrote after the PR number of /ao-fix.
 import { createHash } from 'node:crypto';
+import { matchesGlob } from '../quality/glob.mjs';
+import { checkBranch } from '../tracker/conventions.mjs';
 import { answersPrompt, promptFor, resumePrompt } from './prompts.mjs';
 import { openQuestions } from './runs.mjs';
 import { fullReviewEffort, securityScope } from './security-scope.mjs';
@@ -331,9 +333,10 @@ function decideBuild(facts, options) {
 }
 
 // The review runs a PR still needs on its head: reviewer always on the whole PR, security on the whole PR or on the
-// new part only (spec 2.6). Each starts on the base branch of the PR: what steers an agent (.claude/, CLAUDE.md, hooks)
-// is read from the checkout, so a PR that changes it cannot steer its own review. The code of the PR is in a worktree
-// at its head (Pilot 1, T10).
+// new part only (spec 2.6). Each starts on the base branch of the PR, a protected one (baseStop): what steers an agent
+// (.claude/, CLAUDE.md, hooks) is read from the checkout. The code of the PR is in a worktree at its head, without its
+// instruction files, so a PR that changes them cannot steer its own review (Pilot 1, T10 and the review of ao-sample
+// PR #13).
 function reviewRuns(facts, options) {
   const { pr, item } = facts;
   const runs = [];
@@ -351,20 +354,32 @@ function reviewRuns(facts, options) {
 }
 
 // Why a PR command cannot run on this PR, or null.
-function prStop(facts, command) {
+function prStop(facts, command, { gates }) {
   const { pr } = facts;
   if (!pr) return stop(`PR #${facts.arg} was not found`, '/ao-status');
   if (pr.state !== 'open') return stop(`PR #${pr.number} is ${pr.merged ? 'merged' : 'closed'}`, facts.item ? `/ao-status ${facts.item.key}` : '/ao-status');
   if (pr.docsEpic) return stop(`PR #${pr.number} is the docs PR of ${pr.docsEpic}: merge-gate merges it after gate ②, with no review`, `/ao-plan ${pr.docsEpic}`);
   if (facts.outside) return stop(`PR #${pr.number} is on ${pr.headRef}, whose item ${facts.outside} is not in ${facts.space}: ao-step works in ${facts.space} only`, '/ao-status');
   if (!facts.item) return stop(`PR #${pr.number} is on ${pr.headRef}, which is not the branch of a work item`, '/ao-status');
-  return flaggedStop(facts.item) ?? (command === 'review' && pr.ci.pending ? stop(`CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-review ${pr.number} once CI is done`) : null);
+  return baseStop(pr, gates) ?? flaggedStop(facts.item) ?? (command === 'review' && pr.ci.pending ? stop(`CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-review ${pr.number} once CI is done`) : null);
+}
+
+// The reviews run on a checkout of the PR's base, whose .claude/ and kit steer the agents. Its author chooses the base
+// and can change it after CI has run, so it must be a protected branch, and the one its branch is cut from (Pilot 1,
+// review of ao-sample PR #13).
+function baseStop(pr, gates) {
+  const next = `/ao-review ${pr.number} once its base on GitHub is the branch it was cut from`;
+  if (!gates.protected_branches.some((pattern) => matchesGlob(pattern, pr.base))) {
+    return stop(`PR #${pr.number} goes into ${pr.base}, which is not a protected branch (${gates.protected_branches.join(', ')}): its review would run on a branch the PR author controls`, next);
+  }
+  const branch = checkBranch(pr.headRef, { base: pr.base });
+  return branch.ok ? null : stop(`PR #${pr.number} goes into ${pr.base}, but ${branch.reason.replace(/, not .*$/, '')}`, next);
 }
 
 // /ao-review <PR>: reviewer, then security; it ends at gate ③ with both reports on the head.
 function decideReview(facts, options) {
   const lines = facts.item ? [itemLine(facts)] : [];
-  const early = prStop(facts, 'review');
+  const early = prStop(facts, 'review', options);
   if (early) return { ...early, lines };
   const { pr } = facts;
   if (pr.ci.failed) return { ...stop(`CI is red on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number}`), lines };
@@ -386,7 +401,7 @@ function afterReviews({ pr }) {
 // /ao-fix <PR> [what to fix]: the dev agent of the item, then the reviews again.
 function decideFix(facts, options) {
   const lines = facts.item ? [itemLine(facts)] : [];
-  const early = prStop(facts, 'fix');
+  const early = prStop(facts, 'fix', options);
   if (early) return { ...early, lines };
   const { pr, item } = facts;
   const carried = carryOn('fix', facts, { ...options, answers: undefined });

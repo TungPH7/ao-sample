@@ -28,6 +28,29 @@ export function unquotePath(text) {
   return new TextDecoder().decode(new Uint8Array(bytes));
 }
 
+// The lines of a git diff: { kind: 'file' } for a `diff --git` line, { kind: 'header', side, path } for the `---` and
+// `+++` lines of a file's header, { kind: 'hunk', start, count } for an `@@` line, and { kind: 'line', text } for the
+// rest. A header line comes before the first hunk of its file: inside a hunk, an added line "++ b/README.md" shows as
+// "+++ b/README.md" and is a line of the file (review of ao-sample PR #13).
+export function* diffLines(diff) {
+  let header = true;
+  for (const text of diff.split(/\r?\n/)) {
+    if (text.startsWith('diff --git ')) {
+      header = true;
+      yield { kind: 'file' };
+      continue;
+    }
+    const hunk = text.match(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/);
+    if (hunk) {
+      header = false;
+      yield { kind: 'hunk', start: Number(hunk[1]), count: hunk[2] === undefined ? 1 : Number(hunk[2]) };
+      continue;
+    }
+    const found = header ? headerPath(text) : null;
+    yield found ? { kind: 'header', ...found } : { kind: 'line', text };
+  }
+}
+
 // The path of a `--- a/<path>` or `+++ b/<path>` line of a git diff: { side: '---' or '+++', path }, with path null for
 // /dev/null; null for any other line.
 export function headerPath(line) {

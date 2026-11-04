@@ -80,11 +80,11 @@ export async function readWorkItem(jira, key, ctx) {
   };
 }
 
-// The Stories, Tasks and Bugs of an Epic, which ba creates in stage plan.
-// Each comes with its Sub-tasks: a Story split into Sub-tasks carries its role and effort labels on them.
 // The keys of the items that block this one: the inward side of its "is blocked by" links.
 const blockedByOf = (fields) => (fields.issuelinks ?? []).filter(({ type, inwardIssue }) => type?.inward === 'is blocked by' && inwardIssue).map(({ inwardIssue }) => inwardIssue.key);
 
+// The Stories, Tasks and Bugs of an Epic, which ba creates in stage plan.
+// Each comes with its Sub-tasks: a Story split into Sub-tasks carries its role and effort labels on them.
 async function readChildren(jira, epic, { contract, mapping, roster, space }) {
   const item = ({ key, fields }) => ({ key, summary: fields.summary, ...locate(fields.issuetype.name, fields.status.name, contract, mapping), status: fields.status.name, labels: fields.labels ?? [], blockedBy: blockedByOf(fields), ...workLabels(fields.labels ?? [], mapping, roster) });
   const found = await jira.searchAll(`project = "${space}" AND parent = "${epic}"`, ['summary', 'issuetype', 'status', 'labels', 'issuelinks']);

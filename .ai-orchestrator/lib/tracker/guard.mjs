@@ -62,18 +62,64 @@ const WRITE_TOOLS = ['createJiraIssue', 'editJiraIssue', 'addOrEditJiraIssueComm
 // Generic tools that run any operation by name: a way around transitionJiraIssue and jira-guard.
 const ANY_WRITE = ['executeWrite', 'executeDestructive'];
 
-// A link to one work item, as a PR body or a ledger has it, is text, not a call. A link that goes on past the key (a
-// path, a query, a ".json") is not one of these.
-const WORK_ITEM_LINK = /https?:\/\/[a-z0-9-]+\.atlassian\.net\/browse\/[a-z][a-z0-9_]*-\d+(?![\w/?#&=%~+-]|\.[^\s)\]"'`>*])/gi;
-const ATLASSIAN_HOST = /atlassian\.(?:net|com)\b/i;
-const NETWORK_CLIENT = /\b(?:curl|wget|iwr|irm|axios|urllib|httpie)\b|Invoke-(?:WebRequest|RestMethod)|\bfetch\s*\(|\brequests\.|\bhttps?\.(?:get|request)\b/i;
+// A link to one work item, as a PR body or a ledger has it: it ends at the key, before a space, the end of a line, a
+// closing bracket or quote, or punctuation that ends a sentence. A link that goes on (a path, a query, ";", ".json")
+// is not one of these.
+const WORK_ITEM_LINK = /https?:\/\/[a-z0-9-]+\.atlassian\.net\/browse\/[a-z][a-z0-9_]*-\d+(?=$|[\s)\]>"'`]|[.,:!?](?:$|[\s)\]>"'`]))/gim;
+const NETWORK_CLIENT = /\b(?:curl|wget|iwr|irm|axios|urllib|httpie|openssl|ncat|nc|telnet|socat)\b|\bhttp\.client\b|Invoke-(?:WebRequest|RestMethod)|WebClient|HttpClient|\bfetch\s*\(|\brequests\.(?:get|post|put|patch|delete|request|Session)\b|\bhttps?\.(?:get|request)\b/i;
 
-// A Bash command reaches Atlassian when, its work item links left out, it names an Atlassian host, or it runs a network
-// client and says "atlassian" anywhere, as in $ATLASSIAN_AGENT_TOKEN. The word in text the command writes to a file
-// passes: block-atlassian refused five such commands in Pilot 1 (SMP-2, SMP-5, SMP-6).
+// The first line of a heredoc whose body is data: cat or tee writing to a file, after simple commands only, with the
+// delimiter quoted so the shell expands nothing in the body, and nothing after it on the line but where it writes.
+// Returns { dash, delimiter }, or null.
+const PATH = String.raw`(?:[^\s"'\`$()<>;&|]+|"[^"\`$\n]*"|'[^'\n]*')`;
+const SIMPLE = String.raw`(?:[^"'\`$()\n;&|]|"[^"\`$\n]*"|'[^'\n]*')*`;
+const HEAD = new RegExp(String.raw`^(?:${SIMPLE}(?:&&|;)\s*)*(cat|tee)\b(.*)$`);
+const REDIRECT = new RegExp(String.raw`^\s*(>>?\s*${PATH})?\s*$`);
+const TEE_FILE = new RegExp(String.raw`^\s+(?:-a\s+)?${PATH}\s*$`);
+
+function dataHeredoc(line) {
+  const operator = line.match(/<<(-?)\s*(['"])(\w+)\2/);
+  if (!operator) return null;
+  const head = line.slice(0, operator.index).match(HEAD);
+  const after = line.slice(operator.index + operator[0].length);
+  if (!head) return null;
+  const [, tool, args] = head;
+  if (tool === 'cat') {
+    const [before, behind] = [args.match(REDIRECT), after.match(REDIRECT)];
+    if (!before || !behind || !(before[1] || behind[1])) return null;
+  } else if (!TEE_FILE.test(args) || !/^\s*(?:>\s*\/dev\/null)?\s*$/.test(after)) return null;
+  return { dash: operator[1] === '-', delimiter: operator[3] };
+}
+
+// The command without the body of the data heredoc that opens it, when there is one and it is closed.
+function withoutDataBody(command) {
+  const lines = command.split('\n');
+  const heredoc = dataHeredoc(lines[0]);
+  if (!heredoc) return command;
+  const end = lines.findIndex((line, i) => i > 0 && (heredoc.dash ? line.replace(/^\t+/, '') : line) === heredoc.delimiter);
+  return end < 0 ? command : [lines[0], ...lines.slice(end)].join('\n');
+}
+
+// A Bash command reaches Atlassian when it says "atlassian" anywhere, as in $ATLASSIAN_AGENT_TOKEN or a site, but for
+// two kinds of text: the body of a data heredoc (cat or tee to a file, its delimiter quoted), and links to one work item
+// in a command that runs no network client. block-atlassian refused four such writes in Pilot 1 (SMP-2, SMP-5, SMP-6);
+// the review of ao-sample PR #13 showed that cutting links out before looking for a network client, or letting the
+// word through elsewhere, let a link reach the REST API and the token be printed.
 export function reachesAtlassian(command) {
-  const rest = command.replace(WORK_ITEM_LINK, '');
-  return ATLASSIAN_HOST.test(rest) || (NETWORK_CLIENT.test(rest) && /atlassian/i.test(rest));
+  if (NETWORK_CLIENT.test(command)) return /atlassian/i.test(command);
+  return /atlassian/i.test(withoutDataBody(command).replace(WORK_ITEM_LINK, ''));
+}
+
+// The site of the project: its cloud id, or its host name alone or in a URL. A text that only contains the host name,
+// as in a query, is not (review of ao-sample PR #13).
+function isProjectSite(cloudId, mapping) {
+  const text = String(cloudId ?? '');
+  if (text === mapping.cloud_id) return true;
+  try {
+    return Boolean(mapping.site) && new URL(text.includes('://') ? text : `https://${text}`).hostname === mapping.site.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 // The block-atlassian hook (spec section 2.6, plan task T14): no Atlassian call from Bash, no Atlassian tool of another
@@ -92,7 +138,7 @@ export function checkToolCall(input, { mapping, space }) {
   if (ANY_WRITE.includes(name)) return deny(`${name} can run any write; use ${WRITE_TOOLS.slice(0, -1).join(', ')} or ${WRITE_TOOLS.at(-1)}`);
   if (!WRITE_TOOLS.includes(name)) return allow;
   if (!space) return deny('set AO_JIRA_SPACE to the project space key in .claude/settings.json');
-  if (args.cloudId && args.cloudId !== mapping.cloud_id && !args.cloudId.includes(mapping.site)) return deny(`${args.cloudId} is not the Jira site of the project`);
+  if (args.cloudId && !isProjectSite(args.cloudId, mapping)) return deny(`${args.cloudId} is not the Jira site of the project`);
   if (name === 'createJiraIssue') return args.projectKey === space ? allow : deny(`${args.projectKey} is outside the project space ${space}`);
   const [key] = extractKeys(String(args.issueIdOrKey ?? ''));
   if (!key) return deny(`use the work item key, not ${args.issueIdOrKey}, so the project space can be checked`);
@@ -114,8 +160,7 @@ function checkLink(args, { mapping, space, deny, allow }) {
   if (!space) return deny('set AO_JIRA_SPACE to the project space key in .claude/settings.json');
   // The server needs the cloudId of executeWrite itself; the one in the inputs may be left out.
   for (const cloudId of [args.cloudId, ...(inputs.cloudId === undefined ? [] : [inputs.cloudId])]) {
-    const site = String(cloudId ?? '');
-    if (site !== mapping.cloud_id && !(mapping.site && site.includes(mapping.site))) return deny(`${cloudId ?? 'no cloudId'} is not the Jira site of the project`);
+    if (!isProjectSite(cloudId, mapping)) return deny(`${cloudId ?? 'no cloudId'} is not the Jira site of the project`);
   }
   if (!/^blocks$/i.test(String(inputs.linkType ?? ''))) return deny(`${LINK_OPERATION} may only make a Blocks link, not ${inputs.linkType}`);
   const keys = [inputs.inwardIssue, inputs.outwardIssue].map((key) => String(key ?? ''));
