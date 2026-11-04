@@ -334,9 +334,10 @@ function decideBuild(facts, options) {
 
 // The review runs a PR still needs on its head: reviewer always on the whole PR, security on the whole PR or on the
 // new part only (spec 2.6). Each starts on the base branch of the PR, a protected one (baseStop): what steers an agent
-// (.claude/, CLAUDE.md, hooks) is read from the checkout. The code of the PR is in a worktree at its head, without its
-// instruction files, so a PR that changes them cannot steer its own review (Pilot 1, T10 and the review of ao-sample
-// PR #13).
+// (.claude/, CLAUDE.md, hooks) is read from the checkout. The code of the PR is in a worktree at its head, without the
+// instruction files Claude Code loads (Pilot 1, T10 and the reviews of ao-sample PR #13). ao-step itself and the kit are
+// those of the branch checked out when the command starts; ao-step starts a review or a fix only on a protected branch,
+// and goes back to the base of the PR when a command ends with the PR open (checkoutStop, homeBranch in ao-step.mjs).
 function reviewRuns(facts, options) {
   const { pr, item } = facts;
   const runs = [];
@@ -348,7 +349,9 @@ function reviewRuns(facts, options) {
     runs.push({ role: 'security', key: item.key, effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), ...place, scope: scope.reason, effortWhy: reason });
   }
   if (scope.mode === 'delta') {
-    runs.push({ role: 'security', key: item.key, effort: 'high', purpose: 'review-delta', prompt: promptFor('review-delta', { pr: pr.number, since: scope.since, at: scope.at }), ...place, scope: scope.reason });
+    // high, or the roster's effort when the new part is on a protected path (Pilot 1, second review of ao-sample PR #13).
+    const effort = scope.protected ? options.roster.roles.security.effort : 'high';
+    runs.push({ role: 'security', key: item.key, effort, purpose: 'review-delta', prompt: promptFor('review-delta', { pr: pr.number, since: scope.since, at: scope.at, earlier: scope.earlier }), ...place, scope: scope.reason });
   }
   return runs;
 }

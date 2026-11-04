@@ -9,7 +9,8 @@
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
@@ -19,6 +20,7 @@ import { readContract } from '../lib/contract.mjs';
 import { projectSettings, setting } from '../lib/project-settings.mjs';
 import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
+import { matchesGlob } from '../lib/quality/glob.mjs';
 import { appCredentials, githubRepoOf, installationToken, userVariable } from '../lib/quality/github-app.mjs';
 import { createGitHubClient } from '../lib/tracker/github-client.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
@@ -47,6 +49,23 @@ export function checkArgument(command, arg, space) {
   if (!/^[A-Z][A-Z0-9]*-\d{1,7}$/.test(arg ?? '')) return `/ao-${command} takes a Jira key such as ${space ?? 'DEMO'}-12, not ${arg ?? 'nothing'}`;
   if (space && !arg.startsWith(`${space}-`)) return `${arg} is not in the space ${space} of this project`;
   return null;
+}
+
+// ao-step, the kit and the instructions of the agents are read from the checkout, so a review or a fix starts only on a
+// protected branch: on the branch of a PR it would run that PR's code (second review of ao-sample PR #13). This
+// catches a slip; what keeps the checkout there is homeBranch below, run by the code the command started with.
+const isProtected = (branch, protectedBranches) => protectedBranches.some((pattern) => matchesGlob(pattern, branch));
+export function checkoutStop(command, branch, protectedBranches) {
+  if (!['review', 'fix'].includes(command) || isProtected(branch, protectedBranches)) return null;
+  return `the checkout is on ${branch || 'a detached HEAD'}, not a protected branch (${protectedBranches.join(', ')}): ao-step, the kit and the instructions of the agents would come from it. Switch it to the base of the PR (git switch develop), then run /ao-${command} again`;
+}
+
+// The branch the checkout goes back to when a command ends: the base of the item's open PR, so the next /ao-review or
+// /ao-fix starts on approved code. A build whose PR is not open yet stays on its branch, where the next run goes on.
+export function homeBranch(command, facts, protectedBranches) {
+  const pr = facts?.pr;
+  if (!['build', 'review', 'fix'].includes(command) || pr?.state !== 'open') return null;
+  return isProtected(pr.base, protectedBranches) ? pr.base : null;
 }
 
 const secret = (name) => process.env[name] || userVariable(name);
@@ -96,6 +115,12 @@ async function main() {
   const contract = readContract(join(kitDir, 'contract'));
   const mapping = readMapping(join(kitDir, 'tracker'));
   const gates = readGates(join(kitDir, 'quality'));
+  const onBranch = () => git('branch', '--show-current').stdout?.trim() ?? '';
+  const wrongCheckout = checkoutStop(command, onBranch(), gates.protected_branches);
+  if (wrongCheckout) {
+    console.log(`STOP: ${wrongCheckout}`);
+    return;
+  }
   const localFile = join(kitDir, 'roster.local.yaml');
   const local = existsSync(localFile) ? parse(readFileSync(localFile, 'utf8')) : undefined;
   const { roster, errors } = mergeLocal(readRoster(join(kitDir, 'agents')), local, { skillExists: (name) => existsSync(join(projectDir, '.claude', 'skills', name, 'SKILL.md')) });
@@ -138,7 +163,7 @@ async function main() {
   }
   try {
     console.log('');
-    const { decision: final } = await runGo({
+    const { decision: final, facts: last } = await runGo({
       command,
       arg,
       options,
@@ -157,6 +182,12 @@ async function main() {
       log: (line) => console.log(line),
     });
     console.log(`\n${formatDecision(final)}\nReport: .ai/runs/${key}/last.md`);
+    const home = homeBranch(command, last, gates.protected_branches);
+    const now = onBranch();
+    if (home && now !== home) {
+      const back = prepareCheckout({ branch: home, pull: true });
+      console.log(back.ok ? `The checkout is back on ${home}, so the next /ao-review or /ao-fix starts from approved code.` : `The checkout stays on ${now}: ${back.reason}. Switch it to ${home} before the next /ao-review or /ao-fix.`);
+    }
   } finally {
     rmSync(lock, { force: true });
   }
@@ -286,20 +317,22 @@ function prepareCheckout({ branch, from, pull }) {
   return { ok: true };
 }
 
-// The worktree of a PR for its review (Pilot 1, T10): the code at the head the review is on, in .ai/reviews/pr-<N>, which
-// is never committed. A stale one from a run that was stopped is replaced. The PR's instruction files (CLAUDE.md,
-// .claude/) are removed from it at once, since Claude Code would load them when the agent reads a file there (review of
-// ao-sample PR #13). Node finds the node_modules of the checkout's root above it; a workspace's own node_modules, such as
-// apps/web/node_modules, it does not find, so the tests of that workspace may not run there.
-const worktreePath = (name) => join('.ai', 'reviews', name);
+// The worktree of a PR for its review (Pilot 1, T10): the code at the head the review is on, never committed. It is in
+// the temp folder, outside the project: Claude Code loads the instruction files (CLAUDE.md, AGENTS.md, .claude/rules) of
+// a folder of the project when the agent reads a file there, and a probe of the second review of ao-sample PR #13 found
+// that it loads none from a folder outside it, while agents still read, search and run commands there, and gh-guard lets
+// them write in the temp folder. --add-dir is not given: with it, the skills of the folder's .claude/skills load. The
+// instruction files are still removed from it, in case a later Claude Code loads more. A stale worktree from a run that
+// was stopped is replaced. Node finds no node_modules there, so tests that need packages do not run in it.
+export const reviewTreePath = (project, name, tmp = tmpdir()) => join(tmp, 'ao-reviews', `${basename(resolve(project))}-${name}`);
 function addWorktree({ name, sha }) {
-  const path = worktreePath(name);
-  if (existsSync(join(projectDir, path))) removeWorktree({ name });
-  mkdirSync(join(projectDir, '.ai', 'reviews'), { recursive: true });
+  const path = reviewTreePath(projectDir, name);
+  if (existsSync(path)) removeWorktree({ name });
+  mkdirSync(join(path, '..'), { recursive: true });
   const added = git('worktree', 'add', '--detach', '--quiet', path, sha);
   if (added.status !== 0) return { ok: false, reason: `git could not add the worktree of ${name} at ${sha.slice(0, 7)}: ${(added.stderr || added.stdout).trim()}` };
   try {
-    removeInstructions(join(projectDir, path), { readdirSync, rmSync });
+    removeInstructions(path, { readdirSync, rmSync });
   } catch (error) {
     removeWorktree({ name });
     return { ok: false, reason: `the instruction files of the PR could not be removed from its worktree: ${error.message}` };
@@ -310,18 +343,18 @@ function addWorktree({ name, sha }) {
 // Takes the worktree away with what the agent left in it. A process that still holds a file of it (Windows) leaves the
 // folder behind; the next run of the same PR replaces it.
 function removeWorktree({ name }) {
-  const path = worktreePath(name);
+  const path = reviewTreePath(projectDir, name);
   const removed = git('worktree', 'remove', '--force', path);
-  if (removed.status !== 0 && existsSync(join(projectDir, path))) {
+  if (removed.status !== 0 && existsSync(path)) {
     try {
-      rmSync(join(projectDir, path), { recursive: true, force: true });
+      rmSync(path, { recursive: true, force: true });
     } catch (error) {
       git('worktree', 'prune');
       return { ok: false, reason: error.message };
     }
   }
   git('worktree', 'prune');
-  return existsSync(join(projectDir, path)) ? { ok: false, reason: `${path} is still there` } : { ok: true };
+  return existsSync(path) ? { ok: false, reason: `${path} is still there` } : { ok: true };
 }
 
 // The second /ao-plan: jira-sync for the Epic, with your gh login, since this is your session, not an agent's.

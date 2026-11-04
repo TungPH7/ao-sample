@@ -7,7 +7,7 @@ import { ciAccount, latestFlagComment, needsYouMarker } from '../tracker/flags.m
 import { raiseFlag } from '../tracker/sync.mjs';
 import { docsConditions, docsPullRequest, readDocsFacts } from './docs-pr.mjs';
 import { matchesGlob } from './glob.mjs';
-import { checkDescription, readReviewReport } from './pull-request.mjs';
+import { checkDescription, openCounts, readReviewReport } from './pull-request.mjs';
 
 const OPEN_PRS = { state: 'open', sort: 'created', direction: 'asc' };
 // GitHub's answers to a merge it will not make now: 405, the PR cannot be merged; 409, the head moved.
@@ -234,14 +234,18 @@ function baseConditions({ pr, checks }) {
 }
 
 // Each role of the review App needs a report posted by that App on the head commit; the latest one of each role must
-// be readable and have no Critical or High finding.
+// be readable and leave no Critical or High finding open. A security report of the new part counts with the reports
+// before it, whatever their commit: the earlier findings it does not list as Fixed stay open (openCounts).
 function reportGaps(reviews, head, at, roles, bot) {
-  const reports = reviews.filter((r) => r.user?.login === bot && r.commit_id === head).map((r) => readReviewReport(r.body, roles));
+  const reports = reviews.filter((r) => r.user?.login === bot).map((r) => ({ ...readReviewReport(r.body, roles), sha: r.commit_id }));
   return roles.flatMap((role) => {
-    const latest = reports.filter((report) => report.role === role).at(-1);
+    const mine = reports.filter((report) => report.role === role);
+    const index = mine.findLastIndex((report) => report.sha === head);
+    const latest = mine[index];
     if (!latest) return [`${role} report ${at}`];
     if (!latest.ok) return [`readable ${role} report ${at} (${latest.problems.join('; ')})`];
-    if (latest.blocking.length > 0) return [`${role} report ${at} without Critical or High findings (${latest.blocking.length} open)`];
+    const open = openCounts(mine.slice(0, index + 1)).at(-1);
+    if (open > 0) return [`${role} report ${at} without Critical or High findings (${open} open)`];
     return [];
   });
 }

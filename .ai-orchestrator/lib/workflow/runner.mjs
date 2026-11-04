@@ -149,7 +149,8 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
   }
   const final = reason ? { go: false, reason, next: `/ao-${command} ${arg ?? ''}`.trim(), lines: decision.lines ?? [] } : decision;
   if (key) store.writeLast(key, lastReport({ command, key, made, decision: final, state: store.readState(key) }));
-  return { decision: final, made };
+  // facts: what the last decision was made on, so ao-step can put the checkout on the base of the PR.
+  return { decision: final, made, facts };
 }
 
 const same = (a, b) => a.role === b.role && a.purpose === b.purpose && a.key === b.key && !b.resume;

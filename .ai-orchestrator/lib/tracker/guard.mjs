@@ -73,7 +73,9 @@ const NETWORK_CLIENT = /\b(?:curl|wget|iwr|irm|axios|urllib|httpie|openssl|ncat|
 // Returns { dash, delimiter }, or null.
 const PATH = String.raw`(?:[^\s"'\`$()<>;&|]+|"[^"\`$\n]*"|'[^'\n]*')`;
 const SIMPLE = String.raw`(?:[^"'\`$()\n;&|]|"[^"\`$\n]*"|'[^'\n]*')*`;
-const HEAD = new RegExp(String.raw`^(?:${SIMPLE}(?:&&|;)\s*)*(cat|tee)\b(.*)$`);
+// The spaces after a separator are SIMPLE's to read, not a \s* of their own: two ways to read them made the regex
+// backtrack exponentially on "a; a; a; …" (second review of ao-sample PR #13).
+const HEAD = new RegExp(String.raw`^(?:${SIMPLE}(?:&&|;))*\s*(cat|tee)\b(.*)$`);
 const REDIRECT = new RegExp(String.raw`^\s*(>>?\s*${PATH})?\s*$`);
 const TEE_FILE = new RegExp(String.raw`^\s+(?:-a\s+)?${PATH}\s*$`);
 

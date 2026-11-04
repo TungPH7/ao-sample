@@ -169,6 +169,10 @@ export function buildReviewPack({ pr, checks, item, docs, template, files, modif
   return `${out.join('\n').replace(/\n+$/, '')}\n`;
 }
 
+// A word of a shell command the pack gives in its own words, such as a file name the PR chose: in single quotes, where
+// the shell expands nothing, with each ' written '\'' (second review of ao-sample PR #13: `$(…)` in a name would run).
+const singleQuoted = (word) => `'${word.replaceAll("'", "'\\''")}'`;
+
 // The lines of a text, the last one counted once whether or not it ends with a line break.
 const lineCount = (text) => text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
 // Names of files that hold text: one with a NUL byte is still code or data the PR runs (Pilot 1, review of ao-sample
@@ -186,7 +190,7 @@ function fullText(modified, { head, maxFullTextChars, maxFileLines }) {
   let used = 0;
   for (const { path: onDisk, text } of modified) {
     const path = shown(onDisk);
-    const read = `Read it with \`MSYS_NO_PATHCONV=1 git show ${head}:${path}\`.`;
+    const read = `Read it with \`MSYS_NO_PATHCONV=1 git show ${singleQuoted(`${head}:${path}`)}\`.`;
     let why = null;
     if (LOCKFILE.test(path)) why = 'a lockfile; its changes are in the diff.';
     else if (text === null) why = `git could not read it at the head. ${read}`;

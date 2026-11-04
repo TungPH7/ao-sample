@@ -6,7 +6,7 @@
 import { docsPullRequest, gatePassage } from '../quality/docs-pr.mjs';
 import { docsRule } from '../quality/gates.mjs';
 import { approved, botLogin, protectedPaths } from '../quality/merge-gate.mjs';
-import { readReviewReport } from '../quality/pull-request.mjs';
+import { openCounts, readReviewReport } from '../quality/pull-request.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { expectedOptions } from '../tracker/expected.mjs';
 import { changesRequestedOn, githubGuards, jiraGuards, readChecks } from '../tracker/facts.mjs';
@@ -181,7 +181,14 @@ export function reviewReports(reviews, { roles, bot, head }) {
   const all = reviews
     .filter((r) => r.user?.login === bot)
     .map((r) => ({ ...readReviewReport(r.body, roles), sha: r.commit_id, at: r.submitted_at, state: r.state }));
-  const brief = (report) => (report ? { sha: report.sha, at: report.at, ok: report.ok, blocking: report.blocking?.length ?? 0, state: report.state, onHead: report.sha === head } : null);
+  // blocking: the Critical and High findings open after the report, with those a report of the new part carries
+  // (openCounts); open: those the report itself names, for the next review of the new part to check.
+  const counts = new Map(roles.flatMap((role) => {
+    const mine = all.filter((report) => report.role === role);
+    return openCounts(mine).map((count, i) => [mine[i], count]);
+  }));
+  const named = (report) => (report.blocking ?? []).map(({ severity, where, finding }) => ({ severity, where, finding }));
+  const brief = (report) => (report ? { sha: report.sha, at: report.at, ok: report.ok, blocking: counts.get(report) ?? 0, open: named(report), state: report.state, onHead: report.sha === head } : null);
   const reports = Object.fromEntries(roles.map((role) => [role, brief(all.filter((report) => report.role === role).at(-1))]));
   return { reports, securityFull: brief(all.filter((report) => report.role === 'security' && !report.scope).at(-1)) };
 }
