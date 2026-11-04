@@ -2,21 +2,24 @@
 // run, write state.json, gather the facts again, decide again, until the decision is STOP. Every effect is a parameter,
 // so tests run it without claude, git or the network:
 //   gather()                      the facts of the command (lib/workflow/facts.mjs)
-//   agent(run, { log })           starts ao-agent.mjs for one run and resolves { lines } when it ends; log is the name
-//                                 of its stream-json log in .ai/runs/<KEY>/
+//   agent(run, { log })           starts ao-agent.mjs for one run and resolves { lines, stopped } when it ends; log is the
+//                                 name of its stream-json log in .ai/runs/<KEY>/; stopped: it stayed alive after its
+//                                 result and was stopped (lib/workflow/agent-process.mjs)
 //   git(checkout)                 puts the checkout on a branch; resolves { ok, reason }
 //   dispatch(action)              asks GitHub to run jira-sync for an item (the second /ao-plan)
 //   pack(run, facts)              writes the context pack of a full review run; resolves its path, or null (optional)
+//   worktree                      { add(spec), remove(spec) } for a run that has a worktree (a review: the code of its PR at
+//                                 its head); add resolves { ok, path, reason }, remove { ok, reason } (optional)
 //   store                         { readState(key), writeState(key, state), writeLast(key, text) }
 //   sleep(ms), now(), log(line)
 // Agents run one after another, never two at once.
-import { packNote } from './prompts.mjs';
+import { packNote, worktreeNote } from './prompts.mjs';
 import { readRun } from './runs.mjs';
 import { decideStep } from './steps.mjs';
 
 // ciStartMs: how long a PR head may wait for its first check run before the runner stops (SMP-2: GitHub started none).
 export const LIMITS = { maxRuns: 8, ciWaitMs: 30 * 60 * 1000, ciStartMs: 5 * 60 * 1000, syncWaitMs: 15 * 60 * 1000, pollMs: 30 * 1000 };
-// The most of an agent's answer state.json keeps; the whole answer stays in the run's log.
+// The most of an agent's answer state.json keeps; the whole answer stays in the run's log and in last.md.
 const TEXT_MAX = 2000;
 // Only a full review gets a pack: the pack holds the diff of the whole PR, and a review of the new part (review-delta)
 // reads the diff since its last report (Pilot 1, review of ao-sample PR #6).
@@ -36,7 +39,7 @@ export function agentCommand(run, kitDir) {
   };
 }
 
-export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
+export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, worktree, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
   const limits = { ...LIMITS, ...given };
   let facts = await gather();
   let decision = decide(command, facts, options);
@@ -79,9 +82,24 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     // A review starts from the context pack of its PR (Pilot 1, review cost, option 2), written from the facts it was
     // decided on; without one the agent fetches what it needs itself.
     const file = pack && PACKED.includes(next.purpose) ? await pack(next, facts) : null;
-    const { lines } = await agent(file ? { ...next, prompt: `${next.prompt}
-
-${packNote(file)}` } : next, { log: logName });
+    // The worktree of the PR is added just before the run and removed when it ends, whatever way it ends.
+    const tree = next.worktree && worktree ? await worktree.add(next.worktree) : null;
+    if (tree && !tree.ok) {
+      reason = tree.reason;
+      break;
+    }
+    const notes = [file && packNote(file), tree && worktreeNote(tree.path, next.worktree.sha)].filter(Boolean);
+    let lines;
+    let stopped;
+    try {
+      ({ lines, stopped } = await agent(notes.length > 0 ? { ...next, prompt: [next.prompt, ...notes].join('\n\n') } : next, { log: logName }));
+    } finally {
+      if (tree) {
+        const removed = await worktree.remove(next.worktree);
+        if (!removed.ok) log(`the worktree of ${next.worktree.name} stays: ${removed.reason}`);
+      }
+    }
+    if (stopped) log(`${next.role} stayed alive after its result and was stopped with what it left running`);
     const read = readRun(lines, resumed);
     const record = {
       n,
@@ -102,6 +120,7 @@ ${packNote(file)}` } : next, { log: logName });
       startedAt,
       endedAt: new Date(now()).toISOString(),
       ...(next.resume && { resumed: true }),
+      ...(stopped && { stoppedAfterResult: true }),
       ...(next.checkout && { checkout: next.checkout }),
       ...(next.head && { head: next.head }),
       ...(next.note && { note: next.note }),
@@ -109,7 +128,8 @@ ${packNote(file)}` } : next, { log: logName });
     };
     // state.json is written before anything else, so a stopped shell can go on from here.
     store.writeState(key, { ...state, runs: [...state.runs, record] });
-    made.push(record);
+    // last.md gets the whole answer: it is what Claude reads to tell you what the agent said (Pilot 1, SMP-2).
+    made.push({ ...record, text: read.text });
     previous = { ...record, purpose: next.purpose };
     if (read.outcome === 'usage-limit') {
       reason = `${next.role} hit the usage limit: ${read.text}. Run the same command again after it resets; the run goes on in its session`;

@@ -62,6 +62,20 @@ const WRITE_TOOLS = ['createJiraIssue', 'editJiraIssue', 'addOrEditJiraIssueComm
 // Generic tools that run any operation by name: a way around transitionJiraIssue and jira-guard.
 const ANY_WRITE = ['executeWrite', 'executeDestructive'];
 
+// A link to one work item, as a PR body or a ledger has it, is text, not a call. A link that goes on past the key (a
+// path, a query, a ".json") is not one of these.
+const WORK_ITEM_LINK = /https?:\/\/[a-z0-9-]+\.atlassian\.net\/browse\/[a-z][a-z0-9_]*-\d+(?![\w/?#&=%~+-]|\.[^\s)\]"'`>*])/gi;
+const ATLASSIAN_HOST = /atlassian\.(?:net|com)\b/i;
+const NETWORK_CLIENT = /\b(?:curl|wget|iwr|irm|axios|urllib|httpie)\b|Invoke-(?:WebRequest|RestMethod)|\bfetch\s*\(|\brequests\.|\bhttps?\.(?:get|request)\b/i;
+
+// A Bash command reaches Atlassian when, its work item links left out, it names an Atlassian host, or it runs a network
+// client and says "atlassian" anywhere, as in $ATLASSIAN_AGENT_TOKEN. The word in text the command writes to a file
+// passes: block-atlassian refused five such commands in Pilot 1 (SMP-2, SMP-5, SMP-6).
+export function reachesAtlassian(command) {
+  const rest = command.replace(WORK_ITEM_LINK, '');
+  return ATLASSIAN_HOST.test(rest) || (NETWORK_CLIENT.test(rest) && /atlassian/i.test(rest));
+}
+
 // The block-atlassian hook (spec section 2.6, plan task T14): no Atlassian call from Bash, no Atlassian tool of another
 // server, no generic write tool, and writes only on the project space (Jira Free has no permission scheme, so the
 // agent token could write to every space of the site). space is AO_JIRA_SPACE, set per project.
@@ -69,11 +83,12 @@ export function checkToolCall(input, { mapping, space }) {
   const deny = (reason) => ({ allow: false, reason: `jira: ${reason}` });
   const allow = { allow: true };
   const { tool_name: tool, tool_input: args = {} } = input;
-  if (tool === 'Bash') return /atlassian/i.test(args.command ?? '') ? deny('do not call Atlassian from Bash; use the tools of the atlassian MCP server') : allow;
+  if (tool === 'Bash') return reachesAtlassian(args.command ?? '') ? deny('do not call Atlassian from Bash; use the tools of the atlassian MCP server') : allow;
   if (!tool.startsWith('mcp__')) return allow;
   if (!tool.startsWith(SERVER)) return /atlassian/i.test(tool) ? deny(`use the atlassian MCP server of the project, not ${tool}`) : allow;
 
   const name = tool.slice(SERVER.length);
+  if (name === 'executeWrite' && args.name === LINK_OPERATION) return checkLink(args, { mapping, space, deny, allow });
   if (ANY_WRITE.includes(name)) return deny(`${name} can run any write; use ${WRITE_TOOLS.slice(0, -1).join(', ')} or ${WRITE_TOOLS.at(-1)}`);
   if (!WRITE_TOOLS.includes(name)) return allow;
   if (!space) return deny('set AO_JIRA_SPACE to the project space key in .claude/settings.json');
@@ -82,6 +97,31 @@ export function checkToolCall(input, { mapping, space }) {
   const [key] = extractKeys(String(args.issueIdOrKey ?? ''));
   if (!key) return deny(`use the work item key, not ${args.issueIdOrKey}, so the project space can be checked`);
   return key.startsWith(`${space}-`) ? allow : deny(`${key} is outside the project space ${space}`);
+}
+
+// The one operation executeWrite may run: a Blocks link between two items of the project space, which `ba` makes from
+// the dependencies of the plan. The server has no tool of its own for it: addGraphContext needs the scope
+// write:all:twg, which the agent token does not have (Pilot 1, T10). A link moves no item, so it does not go around
+// jira-guard; only the inputs below are let through, since the server routes any other input into the request.
+const LINK_OPERATION = 'createJiraIssueLink';
+const LINK_ARGS = ['cloudId', 'name', 'inputs', 'responseFields'];
+const LINK_INPUTS = ['cloudId', 'linkType', 'inwardIssue', 'outwardIssue'];
+
+function checkLink(args, { mapping, space, deny, allow }) {
+  const inputs = args.inputs ?? {};
+  const extra = [...Object.keys(args).filter((key) => !LINK_ARGS.includes(key)), ...Object.keys(inputs).filter((key) => !LINK_INPUTS.includes(key))];
+  if (extra.length > 0) return deny(`${LINK_OPERATION} takes only ${LINK_INPUTS.join(', ')}, not ${extra.join(', ')}`);
+  if (!space) return deny('set AO_JIRA_SPACE to the project space key in .claude/settings.json');
+  // The server needs the cloudId of executeWrite itself; the one in the inputs may be left out.
+  for (const cloudId of [args.cloudId, ...(inputs.cloudId === undefined ? [] : [inputs.cloudId])]) {
+    const site = String(cloudId ?? '');
+    if (site !== mapping.cloud_id && !(mapping.site && site.includes(mapping.site))) return deny(`${cloudId ?? 'no cloudId'} is not the Jira site of the project`);
+  }
+  if (!/^blocks$/i.test(String(inputs.linkType ?? ''))) return deny(`${LINK_OPERATION} may only make a Blocks link, not ${inputs.linkType}`);
+  const keys = [inputs.inwardIssue, inputs.outwardIssue].map((key) => String(key ?? ''));
+  const outside = keys.filter((key) => !new RegExp(`^${space}-\\d+$`).test(key));
+  if (outside.length > 0) return deny(`${outside.join(', ')} is not a work item key of the project space ${space}`);
+  return keys[0] === keys[1] ? deny(`${keys[0]} cannot block itself`) : allow;
 }
 
 // The jira-rework hook, after an agent's transition (plan, decision 2): when that move was a rework and the item has

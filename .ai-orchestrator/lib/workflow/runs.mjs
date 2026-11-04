@@ -55,8 +55,10 @@ function outcomeOf(result) {
 }
 
 // The first line of an Open Questions section that says there is none: alone, or before punctuation such as ":", ",",
-// a dash or "(". A question that begins with the same words ("Không có Figma." of ux on SMP-2) is still a question.
+// a dash or "(", and asking nothing. A question that begins with the same words ("Không có Figma." of ux on SMP-2, or
+// "Không có, hay chỉ một nút xóa?") is still a question (review of ao-sample PR #5).
 const NONE = /^(?:Không có|Không còn|None)(?: câu hỏi)?(?: mở)?(?: nào)?(?: cả)?(?: open)?(?: questions?)?\s*(?:$|[.!:;,(–—-])/i;
+const saysNone = (line) => NONE.test(line) && !line.includes('?');
 
 // The questions still open in the Open Questions section of a Markdown artifact: the first line of each item of its
 // top-level list, or its text when it has no list. None when the section is missing or empty, holds only the template's
@@ -71,7 +73,7 @@ export function openQuestions(markdown) {
   const section = lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() !== '');
   const plain = (text) => text.replace(/\*\*|__/g, '').trim();
   const unlisted = (line) => plain(line.replace(/^(?:[-*]|\d+[.)])\s+/, ''));
-  if (section.length > 0 && NONE.test(unlisted(section[0]))) return [];
+  if (section.length > 0 && saysNone(unlisted(section[0]))) return [];
   // Questions named Q1, Q2… at the start of a line, in a list item or a bold paragraph: the bullets and tables that
   // explain them are not questions (sa on DEMO-20, dev-workflow T17).
   const named = section.filter((line) => /^\S/.test(line) && /^Q\d+\b/.test(unlisted(line))).map(unlisted);

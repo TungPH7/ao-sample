@@ -73,7 +73,7 @@ export async function readWorkItem(jira, key, ctx) {
     flag: flagged ? (latestFlagComment(comments)?.kind ?? 'other') : null,
     parent: fields.parent ? { key: fields.parent.key, type: fields.parent.fields.issuetype.name, status: fields.parent.fields.status.name } : null,
     subtasks,
-    blockedBy: (fields.issuelinks ?? []).filter(({ type, inwardIssue }) => type?.inward === 'is blocked by' && inwardIssue).map(({ inwardIssue }) => inwardIssue.key),
+    blockedBy: blockedByOf(fields),
     gates: workType === 'epic' ? gateTimes(histories, contract, mapping) : {},
     children: workType === 'epic' ? await readChildren(jira, found, ctx) : [],
     requests: openRequests(comments, names),
@@ -82,9 +82,12 @@ export async function readWorkItem(jira, key, ctx) {
 
 // The Stories, Tasks and Bugs of an Epic, which ba creates in stage plan.
 // Each comes with its Sub-tasks: a Story split into Sub-tasks carries its role and effort labels on them.
+// The keys of the items that block this one: the inward side of its "is blocked by" links.
+const blockedByOf = (fields) => (fields.issuelinks ?? []).filter(({ type, inwardIssue }) => type?.inward === 'is blocked by' && inwardIssue).map(({ inwardIssue }) => inwardIssue.key);
+
 async function readChildren(jira, epic, { contract, mapping, roster, space }) {
-  const item = ({ key, fields }) => ({ key, summary: fields.summary, ...locate(fields.issuetype.name, fields.status.name, contract, mapping), status: fields.status.name, labels: fields.labels ?? [], ...workLabels(fields.labels ?? [], mapping, roster) });
-  const found = await jira.searchAll(`project = "${space}" AND parent = "${epic}"`, ['summary', 'issuetype', 'status', 'labels']);
+  const item = ({ key, fields }) => ({ key, summary: fields.summary, ...locate(fields.issuetype.name, fields.status.name, contract, mapping), status: fields.status.name, labels: fields.labels ?? [], blockedBy: blockedByOf(fields), ...workLabels(fields.labels ?? [], mapping, roster) });
+  const found = await jira.searchAll(`project = "${space}" AND parent = "${epic}"`, ['summary', 'issuetype', 'status', 'labels', 'issuelinks']);
   const keys = found.map(({ key }) => `"${key}"`);
   const subtasks = keys.length > 0 ? await jira.searchAll(`project = "${space}" AND parent in (${keys.join(', ')})`, ['summary', 'issuetype', 'status', 'labels', 'parent']) : [];
   return found.map((child) => ({ ...item(child), subtasks: subtasks.filter(({ fields }) => fields.parent?.key === child.key).map(item) }));

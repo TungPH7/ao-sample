@@ -17,13 +17,15 @@ import { READ_PERMISSIONS } from '../lib/agents/launch.mjs';
 import { mergeLocal, readRoster } from '../lib/agents/roster.mjs';
 import { readContract } from '../lib/contract.mjs';
 import { projectSettings, setting } from '../lib/project-settings.mjs';
+import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { appCredentials, githubRepoOf, installationToken, userVariable } from '../lib/quality/github-app.mjs';
 import { createGitHubClient } from '../lib/tracker/github-client.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
+import { startAgentProcess, killTree } from '../lib/workflow/agent-process.mjs';
 import { gatherFacts } from '../lib/workflow/facts.mjs';
-import { adfText, buildReviewPack } from '../lib/workflow/review-pack.mjs';
+import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-pack.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
 import { decideStep } from '../lib/workflow/steps.mjs';
 
@@ -144,6 +146,7 @@ async function main() {
       git: (checkout) => prepareCheckout(checkout),
       dispatch: (action) => dispatchJiraSync(action.key),
       pack: reviewPackWriter({ github, jira }),
+      worktree: { add: addWorktree, remove: removeWorktree },
       store: {
         readState: (k) => readJson(join(runsDir, k, 'state.json')),
         writeState: (k, state) => writeFileSync(join(runsDir, k, 'state.json'), `${JSON.stringify(state, null, 2)}\n`),
@@ -178,23 +181,14 @@ function alive(pid) {
 // One run: ao-agent.mjs with its stream-json output appended to the log as it comes; resolves with the lines.
 function startAgent(run, logFile) {
   const { command, args, env } = agentCommand(run, kitDir);
-  return new Promise((done) => {
-    const lines = [];
-    let rest = '';
-    const child = spawn(command, args, { cwd: projectDir, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
-    child.stdout.on('data', (chunk) => {
-      appendFileSync(logFile, chunk);
-      const text = rest + chunk.toString('utf8');
-      const parts = text.split('\n');
-      rest = parts.pop();
-      lines.push(...parts);
-    });
-    child.stderr.on('data', (chunk) => appendFileSync(`${logFile}.stderr`, chunk));
-    child.on('error', (error) => {
-      appendFileSync(`${logFile}.stderr`, `cannot start the agent: ${error.message}\n`);
-      done({ lines });
-    });
-    child.on('close', () => done({ lines: rest ? [...lines, rest] : lines }));
+  return startAgentProcess({
+    spawn,
+    command,
+    args,
+    env: { ...process.env, ...env },
+    cwd: projectDir,
+    append: (stream, chunk) => appendFileSync(stream === 'stdout' ? logFile : `${logFile}.stderr`, chunk),
+    kill: (pid) => killTree(pid, { spawnSync, kill: (target, signal) => process.kill(target, signal) }),
   });
 }
 
@@ -214,18 +208,18 @@ export function reviewPackWriter({ github, jira, git: run = git, projectDir: dir
       // The PR by its number: its branch name is the author's, and one starting with - would read as an option.
       need('fetch', '--quiet', 'origin', `refs/heads/${pr.base}`, `refs/pull/${pr.number}/head`);
       const head = pr.headSha;
+      // git merge-base exits 1 when there is none, so need throws then.
       const baseSha = need('merge-base', `origin/${pr.base}`, head).trim();
-      if (!baseSha) throw new Error(`no merge base of origin/${pr.base} and ${head.slice(0, 7)}`);
       const show = (sha, path) => {
         const shown = run('show', `${sha}:${path}`);
         return shown.status === 0 ? shown.stdout : null;
       };
       const range = `${baseSha}...${head}`;
       const files = need('diff', '--name-status', range).trim().split('\n').filter(Boolean).map((line) => {
-        const [status, ...paths] = line.split('\t');
+        const [status, ...paths] = line.split('\t').map(unquotePath);
         return paths.length > 1 ? { status, from: paths[0], path: paths[1] } : { status, path: paths[0] };
       });
-      const modified = files.filter(({ status }) => status.startsWith('M')).map(({ path }) => ({ path, text: show(head, path) }));
+      const modified = filesToQuote(files).map((path) => ({ path, text: show(head, path) }));
       const epic = item.parent && /epic/i.test(item.parent.type) ? item.parent.key : null;
       const docs = epic && {
         epic,
@@ -289,6 +283,36 @@ function prepareCheckout({ branch, from, pull }) {
     if (merged.status !== 0) return { ok: false, reason: `${branch} has commits that are not on origin/${branch}: ${merged.stderr.trim()}` };
   }
   return { ok: true };
+}
+
+// The worktree of a PR for its review (Pilot 1, T10): the code at the head the review is on, in .ai/reviews/pr-<N>, which
+// is never committed. A stale one from a run that was stopped is replaced. Node finds node_modules above it, in the
+// checkout, so the tests of the PR run there.
+const worktreePath = (name) => join('.ai', 'reviews', name);
+function addWorktree({ name, sha }) {
+  const path = worktreePath(name);
+  if (existsSync(join(projectDir, path))) removeWorktree({ name });
+  mkdirSync(join(projectDir, '.ai', 'reviews'), { recursive: true });
+  const added = git('worktree', 'add', '--detach', '--quiet', path, sha);
+  if (added.status !== 0) return { ok: false, reason: `git could not add the worktree of ${name} at ${sha.slice(0, 7)}: ${(added.stderr || added.stdout).trim()}` };
+  return { ok: true, path: path.replaceAll('\\', '/') };
+}
+
+// Takes the worktree away with what the agent left in it. A process that still holds a file of it (Windows) leaves the
+// folder behind; the next run of the same PR replaces it.
+function removeWorktree({ name }) {
+  const path = worktreePath(name);
+  const removed = git('worktree', 'remove', '--force', path);
+  if (removed.status !== 0 && existsSync(join(projectDir, path))) {
+    try {
+      rmSync(join(projectDir, path), { recursive: true, force: true });
+    } catch (error) {
+      git('worktree', 'prune');
+      return { ok: false, reason: error.message };
+    }
+  }
+  git('worktree', 'prune');
+  return existsSync(join(projectDir, path)) ? { ok: false, reason: `${path} is still there` } : { ok: true };
 }
 
 // The second /ao-plan: jira-sync for the Epic, with your gh login, since this is your session, not an agent's.

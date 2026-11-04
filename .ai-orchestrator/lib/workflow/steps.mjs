@@ -171,13 +171,29 @@ function decidePlan(facts, options) {
   };
 }
 
+// The states in which an item has its PR merged (the `dependencies-merged` guard looks at the PR itself).
+const MERGED_STATES = new Set(['ready-for-qa', 'in-qa', 'done']);
+
+// Ready items that no unmerged item of the Epic blocks (Pilot 1, T9: the first Ready item was suggested, though its
+// blocker was not merged). A blocker outside the Epic cannot be told from here: /ao-build checks it with its own guard.
+function startable(children) {
+  const blocked = ({ blockedBy = [] }) => blockedBy.some((key) => {
+    const blocker = children.find((child) => child.key === key);
+    return blocker && !MERGED_STATES.has(blocker.state);
+  });
+  return children.filter((child) => child.state === 'ready' && !blocked(child)).map(({ key }) => key);
+}
+
 // Past gate ②: jira-sync refines the items (refine-children) and merge-gate merges the docs PR after it.
 function afterPlanGate(facts) {
   const { item: epic, docs } = facts;
   const waiting = epic.children.filter(({ state }) => state === 'new');
   if (docs.pr?.merged && waiting.length === 0) {
-    const ready = epic.children.filter(({ state }) => state === 'ready').map(({ key }) => key);
-    return stop(`the docs PR #${docs.pr.number} of ${epic.key} is merged and its items are refined`, ready.length > 0 ? `/ao-build ${ready[0]}` : `/ao-status ${epic.key}`);
+    const ready = epic.children.filter(({ state }) => state === 'ready');
+    const [first] = startable(epic.children);
+    const why = `the docs PR #${docs.pr.number} of ${epic.key} is merged and its items are refined`;
+    if (!first && ready.length > 0) return stop(`${why}; every Ready item waits for an item that is not merged yet`, `/ao-status ${epic.key}`);
+    return stop(why, first ? `/ao-build ${first}` : `/ao-status ${epic.key}`);
   }
   if (!docs.pr) return stop(`${epic.key} is past gate ② but has no docs PR on ${docs.branch}`, `/ao-status ${epic.key}`);
   return go([{ action: 'jira-sync', key: epic.key, then: docs.pr.merged ? null : { mergeGate: docs.pr.number } }]);
@@ -315,18 +331,21 @@ function decideBuild(facts, options) {
 }
 
 // The review runs a PR still needs on its head: reviewer always on the whole PR, security on the whole PR or on the
-// new part only (spec 2.6).
+// new part only (spec 2.6). Each starts on the base branch of the PR: what steers an agent (.claude/, CLAUDE.md, hooks)
+// is read from the checkout, so a PR that changes it cannot steer its own review. The code of the PR is in a worktree
+// at its head (Pilot 1, T10).
 function reviewRuns(facts, options) {
   const { pr, item } = facts;
   const runs = [];
-  if (!pr.reports.reviewer?.onHead) runs.push({ role: 'reviewer', key: item.key, effort: options.roster.roles.reviewer.effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }) });
+  const place = { checkout: { branch: pr.base, pull: true }, worktree: { name: `pr-${pr.number}`, sha: pr.headSha } };
+  if (!pr.reports.reviewer?.onHead) runs.push({ role: 'reviewer', key: item.key, effort: options.roster.roles.reviewer.effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), ...place });
   const scope = securityScope({ report: pr.reports.security, full: pr.securityFull, compare: pr.securityCompare, gates: options.gates });
   if (scope.mode === 'full') {
     const { effort, reason } = fullReviewEffort({ files: pr.files ?? [], protectedPaths: pr.protectedPaths, item, gates: options.gates, rosterEffort: options.roster.roles.security.effort });
-    runs.push({ role: 'security', key: item.key, effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), scope: scope.reason, effortWhy: reason });
+    runs.push({ role: 'security', key: item.key, effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), ...place, scope: scope.reason, effortWhy: reason });
   }
   if (scope.mode === 'delta') {
-    runs.push({ role: 'security', key: item.key, effort: 'high', purpose: 'review-delta', prompt: promptFor('review-delta', { pr: pr.number, since: scope.since, at: scope.at }), scope: scope.reason });
+    runs.push({ role: 'security', key: item.key, effort: 'high', purpose: 'review-delta', prompt: promptFor('review-delta', { pr: pr.number, since: scope.since, at: scope.at }), ...place, scope: scope.reason });
   }
   return runs;
 }

@@ -1,6 +1,7 @@
 // Coverage of the lines a PR adds or changes (quality-gates spec section 2.4): the lcov files of the tests intersected
 // with a zero-context git diff. Only lines lcov lists count, since only those can run. Pure: scripts/coverage-diff.mjs
 // runs git and finds the lcov files.
+import { headerPath } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
 
 const slashes = (path) => path.replaceAll('\\', '/');
@@ -41,15 +42,16 @@ export function parseLcov(text, { lcovDir, root }) {
   return files;
 }
 
-// { file: [line numbers] } added or changed in the new version, from `git diff -U0`. Deleted files have none.
+// { file: [line numbers] } added or changed in the new version, from `git diff -U0`. Deleted files have none. A path git
+// quotes is read as it is on disk.
 export function changedLines(diff) {
   const changed = new Map();
   let lines = null;
   for (const line of diff.split(/\r?\n/)) {
-    const target = line.match(/^\+\+\+ (?:b\/(.*)|\/dev\/null)$/);
-    if (target) {
-      lines = target[1] === undefined ? null : [];
-      if (lines) changed.set(target[1], lines);
+    const header = headerPath(line);
+    if (header?.side === '+++') {
+      lines = header.path === null ? null : [];
+      if (lines) changed.set(header.path, lines);
       continue;
     }
     const hunk = line.match(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/);

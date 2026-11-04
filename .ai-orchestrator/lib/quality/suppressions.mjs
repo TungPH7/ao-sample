@@ -1,5 +1,6 @@
 // The floor guard of the policy job (quality-gates spec section 2.4): added lines that switch a check off, deleted test
 // files, and quality/gates.yaml thresholds a PR lowers. Pure: scripts/check-policy.mjs runs git.
+import { headerPath } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
 
 // Documentation may name a suppression without using one, and the kit copy is a protected path anyway.
@@ -8,15 +9,16 @@ const NOT_CHECKED = ['**/*.md', '.ai-orchestrator/**'];
 const TEST_FILE = ['**/*.{test,spec}.*', '**/*.e2e-spec.*', 'e2e/**'];
 const LEVELS = ['info', 'low', 'moderate', 'high', 'critical'];
 
-// [{ file, line, text }] for every line a zero-context `git diff` adds.
+// [{ file, line, text }] for every line a zero-context `git diff` adds. A path git quotes is read as it is on disk.
 export function addedLines(diff) {
   const added = [];
   let file = null;
   let line = 0;
   for (const text of diff.split(/\r?\n/)) {
-    const target = text.match(/^\+\+\+ (?:b\/(.*)|\/dev\/null)$/);
+    const header = headerPath(text);
+    const target = header?.side === '+++' ? header : null;
     const hunk = text.match(/^@@ -\S+ \+(\d+)(?:,\d+)? @@/);
-    if (target) file = target[1] ?? null;
+    if (target) file = target.path;
     else if (hunk) line = Number(hunk[1]);
     else if (file && text.startsWith('+')) added.push({ file, line: line++, text: text.slice(1) });
   }
@@ -38,7 +40,14 @@ export function findSuppressions(added, { reason_marker: marker, patterns, never
 
 // Test files the diff deletes; the policy job lists them for the reviewer rather than failing.
 export function deletedTests(diff) {
-  return [...diff.matchAll(/^--- a\/(.+)\n\+\+\+ \/dev\/null$/gm)].map(([, file]) => file).filter((file) => TEST_FILE.some((glob) => matchesGlob(glob, file)));
+  const lines = diff.split(/\r?\n/);
+  return lines
+    .flatMap((line, i) => {
+      const from = headerPath(line);
+      const to = headerPath(lines[i + 1] ?? '');
+      return from?.side === '---' && from.path && to?.side === '+++' && to.path === null ? [from.path] : [];
+    })
+    .filter((file) => TEST_FILE.some((glob) => matchesGlob(glob, file)));
 }
 
 // What a PR loosens in quality/gates.yaml, comparing the base version with its own.
