@@ -1,4 +1,4 @@
-// A PR that copies a kit another project already reviewed (kit-copy-review spec 2.1, 2.2): ao-step compares it with the
+// A PR that copies a kit another project already reviewed (kit-copy-review spec 2.1, 2.2): ao-step compares it with the 
 // head of that review and writes the two reports itself, with no agent. The claim in the PR description proves nothing:
 // everything is checked here against what GitHub says. Any doubt falls back to the review by the agents, so nothing here
 // can let a PR through unread that would not have been read anyway. decideKitCopy and kitCopyReport are pure.
