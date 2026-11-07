@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ValidationFailedException } from '../common/api-error.js';
+import {
+  NotesLimitReachedException,
+  ValidationFailedException,
+} from '../common/api-error.js';
 import { checkNote, type Note } from './notes.shared.js';
 import { NotesStore } from './notes.store.js';
 
@@ -35,7 +38,9 @@ export class NotesService {
       content: checked.value.content,
       createdAt: new Date().toISOString(),
     };
-    this.store.add(note);
+    if (!this.store.add(note)) {
+      throw new NotesLimitReachedException();
+    }
     return note;
   }
 

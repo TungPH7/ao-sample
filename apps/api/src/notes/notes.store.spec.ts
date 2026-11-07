@@ -1,4 +1,4 @@
-import { NotesStore } from './notes.store.js';
+import { MAX_NOTES, NotesStore } from './notes.store.js';
 import type { Note } from './notes.shared.js';
 
 function note(id: string, createdAt = '2026-11-02T07:40:00.000Z'): Note {
@@ -49,5 +49,41 @@ describe('NotesStore', () => {
     store.list();
 
     expect(store.list().map(({ id }) => id)).toEqual(['b', 'a']);
+  });
+
+  describe('the limit of notes', () => {
+    function storeHolding(count: number): NotesStore {
+      const store = new NotesStore();
+      for (let i = 0; i < count; i++) {
+        store.add(note(`n${i}`));
+      }
+      return store;
+    }
+
+    it('holds at most 1000 notes', () => {
+      expect(MAX_NOTES).toBe(1000);
+    });
+
+    it('answers true when it stores a note', () => {
+      expect(new NotesStore().add(note('a'))).toBe(true);
+    });
+
+    it('still stores the last note that fits', () => {
+      const store = storeHolding(MAX_NOTES - 1);
+
+      expect(store.add(note('last'))).toBe(true);
+
+      expect(store.list()).toHaveLength(MAX_NOTES);
+      expect(store.list()[0].id).toBe('last');
+    });
+
+    it('answers false and stores nothing once it is full', () => {
+      const store = storeHolding(MAX_NOTES);
+
+      expect(store.add(note('one-too-many'))).toBe(false);
+
+      expect(store.list()).toHaveLength(MAX_NOTES);
+      expect(store.list().map(({ id }) => id)).not.toContain('one-too-many');
+    });
   });
 });

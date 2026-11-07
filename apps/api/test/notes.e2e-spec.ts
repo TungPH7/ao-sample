@@ -4,6 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { NotesService } from './../src/notes/notes.service.js';
+import { MAX_NOTES } from './../src/notes/notes.store.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ISO_UTC_MS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -362,5 +363,61 @@ describe('Notes (integration)', () => {
       expect(data[0].title.startsWith('N999 ')).toBe(true);
       expect(elapsed).toBeLessThan(1000);
     });
+  });
+
+  describe('when the store holds the most notes it can', () => {
+    beforeEach(() => {
+      const notes = app.get(NotesService);
+      for (let i = 0; i < MAX_NOTES; i++) {
+        notes.create({ title: `N${i}` });
+      }
+    });
+
+    it('POST answers 409 NOTES_LIMIT_REACHED and stores nothing', async () => {
+      const response = await postJson({ title: 'One too many' });
+
+      expect(response.status).toBe(409);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.body).toStrictEqual({
+        error: {
+          code: 'NOTES_LIMIT_REACHED',
+          message: 'The limit of stored notes is reached.',
+        },
+      });
+      const stored = (await storedNotes()) as { title: string }[];
+      expect(stored.map(({ title }) => title)).not.toContain('One too many');
+    });
+
+    it('GET still answers all 1000 notes, newest first', async () => {
+      await postJson({ title: 'One too many' }).expect(409);
+
+      const response = await request(app.getHttpServer()).get('/notes');
+
+      expect(response.status).toBe(200);
+      const { data } = response.body as { data: { title: string }[] };
+      expect(data).toHaveLength(1000);
+      expect(data[0].title).toBe('N999');
+    });
+
+    it('POST of a wrong body still answers 400 VALIDATION_FAILED', async () => {
+      const response = await postJson({ title: '' });
+
+      expect(response.status).toBe(400);
+      expect((response.body as { error: { code: string } }).error.code).toBe(
+        'VALIDATION_FAILED',
+      );
+    });
+  });
+
+  it('POST stores the 1000th note', async () => {
+    const notes = app.get(NotesService);
+    for (let i = 0; i < MAX_NOTES - 1; i++) {
+      notes.create({ title: `N${i}` });
+    }
+
+    const response = await postJson({ title: 'The last that fits' });
+
+    expect(response.status).toBe(201);
+    expect(await storedNotes()).toHaveLength(MAX_NOTES);
   });
 });
