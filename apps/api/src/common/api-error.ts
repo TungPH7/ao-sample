@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 
 // The one shape of every error the API answers (ADR-0003). The codes and their
 // fixed messages are in the API Contract of docs/specs/SMP-2/plan.md; adding a
@@ -9,6 +9,7 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'PAYLOAD_TOO_LARGE'
   | 'UNSUPPORTED_MEDIA_TYPE'
+  | 'NOTES_LIMIT_REACHED'
   | 'REQUEST_FAILED'
   | 'INTERNAL_ERROR';
 
@@ -29,3 +30,7 @@ export class ValidationFailedException extends BadRequestException {
     super();
   }
 }
+
+// Thrown when the store of notes is full; the filter answers it as 409
+// NOTES_LIMIT_REACHED. Any other ConflictException stays REQUEST_FAILED.
+export class NotesLimitReachedException extends ConflictException {}

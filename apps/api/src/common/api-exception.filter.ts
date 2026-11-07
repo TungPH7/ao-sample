@@ -11,6 +11,7 @@ import {
   ApiErrorBody,
   ApiErrorCode,
   FieldError,
+  NotesLimitReachedException,
   ValidationFailedException,
 } from './api-error.js';
 
@@ -22,6 +23,7 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   NOT_FOUND: 'Resource not found.',
   PAYLOAD_TOO_LARGE: 'Request body is too large.',
   UNSUPPORTED_MEDIA_TYPE: 'Content-Type must be application/json.',
+  NOTES_LIMIT_REACHED: 'The limit of stored notes is reached.',
   REQUEST_FAILED: 'Request failed.',
   INTERNAL_ERROR: 'Internal server error.',
 };
@@ -66,6 +68,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
   private toAnswer(exception: unknown): ApiErrorAnswer {
     if (exception instanceof ValidationFailedException) {
       return answer(400, 'VALIDATION_FAILED', exception.fields);
+    }
+    if (exception instanceof NotesLimitReachedException) {
+      return answer(HttpStatus.CONFLICT, 'NOTES_LIMIT_REACHED');
     }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
