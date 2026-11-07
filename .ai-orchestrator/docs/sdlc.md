@@ -32,10 +32,10 @@ Bản đọc của hợp đồng trong `contract/`. Nội dung và lý do của 
 | `review` | Review code và security | `reviewer`, `security`, `human`; human duyệt sau reviewer và security | PR có CI xanh | Báo cáo review (`review-report`) | Không còn finding Critical/High; Cổng ③ `merge-approval`: Bạn approve PR |
 | `merge` | Merge PR | `automation` | PR đã approve | Commit trên nhánh đích | merge-gate pass |
 | `qa-verify` | QA trên môi trường kiểm | `qa` | Bản đã deploy lên môi trường QA (mục 2.6) | Báo cáo QA của item (`qa-report`) | Báo cáo PASS; bạn chấp nhận |
-| `release-cut` | Cắt release lên Staging, khi bạn yêu cầu | `devops` | Điểm cắt trên develop có ít nhất một item Done chưa release; không có nhánh release/* nào đang mở (mục 2.7). Guard: `cut-point-ready`, `no-open-release` | Nhánh release/vX.Y.0 tách từ điểm cắt, Fix Version | Cổng ④ `release-cut-approval`: Bạn duyệt danh sách item của bản |
+| `release-cut` | Cắt release lên Staging, khi bạn yêu cầu | `devops`; Script của ao-step làm thay devops: tính điểm cắt, tạo nhánh release và gắn Fix Version, khi bạn gõ /ao-release <vX.Y.0> <sha> | Điểm cắt trên develop có ít nhất một item Done chưa release; không có nhánh release/* nào đang mở (mục 2.7). Guard: `cut-point-ready`, `no-open-release` | Nhánh release/vX.Y.0 tách từ điểm cắt, Fix Version | Cổng ④ `release-cut-approval`: Bạn duyệt danh sách item của bản |
 | `staging-verify` | Full regression, demo, UAT | `qa`, `human` | Bản release trên Staging | Báo cáo regression của bản release (`regression-report`); Release note (`release-notes`) | Regression PASS; không còn Bug Critical/High mở cho bản này |
 | `ship` | Lên Production | `devops` | Bản đã qua Staging | Merge vào main, tag vX.Y.Z, merge ngược về develop | Smoke test sau deploy pass; Cổng ⑤ `production-approval`: Bạn duyệt lên Production |
-| `hotfix` | Sửa gấp trên Production | `fe-dev`, `be-dev`, `qa`, `devops`; fe-dev hoặc be-dev sửa | Bug Critical/High trên Production | Nhánh hotfix/..., tag bản vá | Như ship, rút gọn |
+| `hotfix` | Sửa gấp trên Production | `fe-dev`, `be-dev`, `qa`, `devops`; fe-dev hoặc be-dev sửa; gate ⑤ là yêu cầu deploy Production do bạn tạo bằng /ao-ship vX.Y.Z | Bug Critical/High trên Production | Nhánh hotfix/..., tag bản vá | Như ship, rút gọn |
 
 ### Cổng duyệt
 
@@ -276,7 +276,7 @@ Quy trình chạy theo Kanban: agent kéo item ready kế tiếp khi còn chỗ 
 ### Release
 
 - **Release theo quyết định của bạn, không theo lịch cố định.** Bạn cắt release khi thấy đủ giá trị để đưa lên, ví dụ khi mọi Story của một Epic đã Done, hoặc khi khách cần sớm một tính năng. Lúc lên Production cũng do bạn quyết ở cổng ⑤.
-- **Điểm cắt.** develop nhận merge liên tục, nên lúc bạn muốn release thường vẫn còn item đã merge nhưng chưa Done. Vì vậy nhánh release tách từ điểm cắt, không từ commit mới nhất của develop. Điểm cắt là commit mới nhất trên lịch sử develop sao cho mọi item có commit tính tới điểm đó đều đã Done, và không item nào trong số đó còn commit nằm sau điểm cắt. Item nằm sau điểm cắt vào bản kế tiếp. release-workflow tính điểm cắt và đưa bạn danh sách item để duyệt ở cổng ④.
+- **Điểm cắt.** develop nhận merge liên tục, nên lúc bạn muốn release thường vẫn còn item đã merge nhưng chưa Done. Vì vậy nhánh release tách từ điểm cắt, không từ commit mới nhất của develop. Điểm cắt là commit mới nhất trên lịch sử develop sao cho mọi item có commit tính tới điểm đó đều đã Done, và không item nào trong số đó còn commit nằm sau điểm cắt. Key của Epic không tính: Epic không được release, item con của nó mới được, nên commit tài liệu của Epic đi theo điểm cắt chứa nó. Item nằm sau điểm cắt vào bản kế tiếp. release-workflow tính điểm cắt và đưa bạn danh sách item để duyệt ở cổng ④.
 - **Mỗi lúc chỉ có một nhánh release/* mở.** Muốn cắt bản mới thì bản đang ở Staging phải lên Production xong trước.
 - **Fix Version.** Luôn có sẵn một Fix Version chưa phát hành làm "bản kế tiếp", vì Bug Medium/Low được gắn vào đó ngay khi triage (mục 2.6). Khi cắt release, Fix Version này được gán cho các item trong điểm cắt; item nằm sau điểm cắt chuyển sang một Fix Version kế tiếp mới. Mô tả Fix Version ghi mục tiêu của bản để báo khách; mục tiêu là dự báo, không phải cam kết.
 

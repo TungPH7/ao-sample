@@ -234,7 +234,7 @@ async function qaDeployed(github, pr, contract, mapping) {
 }
 
 // The first QA environment of the route whose base branch matches; release/* stands for any release branch.
-function qaEnvironment(contract, base) {
+export function qaEnvironment(contract, base) {
   const routes = [contract.new_work_route, ...contract.bug_routing.flatMap(({ routes: list }) => list)];
   const route = routes.find(({ base_branch: branch }) => branch === base || (branch === 'release/*' && base.startsWith('release/')));
   if (!route) throw new Error(`No QA environment for base branch '${base}'`);

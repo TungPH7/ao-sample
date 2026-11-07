@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": ".ai-orchestrator/deploy.yaml",
+  "description": "How the deployer on the VPS builds, runs and smoke-tests the apps of a project (release-workflow spec 2.3, 2.9). It names only the apps, their Dockerfile, port, health path and the names of their environment variables: no volume, privileged mode, host network or published port can be written here.",
+  "type": "object",
+  "required": ["apps", "smoke"],
+  "additionalProperties": false,
+  "properties": {
+    "apps": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/app" }
+    },
+    "smoke": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["app", "path", "expect_status", "expect_text"],
+        "additionalProperties": false,
+        "properties": {
+          "app": { "$ref": "#/$defs/name" },
+          "path": { "$ref": "#/$defs/path" },
+          "expect_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+          "expect_text": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "name": { "type": "string", "maxLength": 20, "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$" },
+    "path": {
+      "description": "A path of the app on its own host: starts with one slash, so it can never name another host.",
+      "type": "string",
+      "pattern": "^/(?!/)\\S*$"
+    },
+    "app": {
+      "type": "object",
+      "required": ["dockerfile", "port", "health"],
+      "additionalProperties": false,
+      "properties": {
+        "dockerfile": {
+          "description": "Path of the Dockerfile from the root of the repo, which is also the build context.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "health": { "$ref": "#/$defs/path" },
+        "public": { "type": "boolean" },
+        "env": {
+          "description": "Names of the environment variables; their values live on the VPS in /etc/ao/secrets.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }
+        }
+      }
+    }
+  }
+}

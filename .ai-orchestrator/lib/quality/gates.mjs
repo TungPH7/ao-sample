@@ -30,7 +30,19 @@ export function readCiJobs(file) {
 // kit/.github/workflows/ci.yml, is only known in the kit repo; a project's copy has no kit folder and skips Q2.
 export function validateGates(gates, contract, { ciJobs } = {}) {
   if (!validateSchema(gates)) return schemaErrors(gates, validateSchema.errors, 'Q1', 'quality/gates.yaml');
-  return [...(ciJobs ? checkChecks(gates, ciJobs) : []), ...checkRoles(gates, contract), ...checkMergeMethods(gates), ...checkDocsPullRequests(gates, contract)];
+  return [
+    ...(ciJobs ? checkChecks(gates, ciJobs) : []),
+    ...checkRoles(gates, contract),
+    ...checkMergeMethods(gates),
+    ...checkDocsPullRequests(gates, contract),
+    ...checkReleasePullRequests(gates),
+  ];
+}
+
+// Q6 (release-workflow spec 2.7): the merge back merge-gate opens after a release goes into a branch it merges back into.
+function checkReleasePullRequests({ release_pull_requests: release }) {
+  if (release.back_merge_bases.includes(release.back_merge_after_release)) return [];
+  return [{ rule: 'Q6', path: 'release_pull_requests.back_merge_after_release', message: `${release.back_merge_after_release} is not one of back_merge_bases, so merge-gate would never merge the PR it opens` }];
 }
 
 // An Epic key in a branch name, as the work item conventions write it.

@@ -1,11 +1,33 @@
 // The conventions and dependency steps of the policy job (quality-gates spec section 2.4). Pure: scripts/check-policy.mjs
 // reads git, the PR event and npm audit.
-import { checkBranch, checkPrTitle } from '../tracker/conventions.mjs';
+import { checkBranch, checkPrTitle, parseBranch } from '../tracker/conventions.mjs';
 import { checkCommitMessage } from './git-hooks.mjs';
 import { LEVELS } from './suppressions.mjs';
 
+const BACK_MERGE_BASE = /^(develop|release\/v\d+\.\d+\.\d+)$/;
+const TAG = 'v<major>.<minor>.<patch>';
+
+// The PRs of a release (release-workflow spec 2.7): release/vX.Y.Z into main, which ao-step opens as "release: vX.Y.Z",
+// and the merge of main back into develop or a release branch, which merge-gate opens as "Merge main into <base> after
+// <tag>". Their commits passed the gates of their own PRs, and audit checks the bot's report commit, so only the title
+// is checked. null for any other PR.
+function releaseFlowProblems({ branch, base, title }) {
+  const release = parseBranch(branch);
+  if (release?.kind === 'release' && base === 'main') {
+    const expected = `release: v${release.version}`;
+    return title === expected ? [] : [`title "${title}": the PR of ${branch} into main is titled "${expected}"`];
+  }
+  if (branch === 'main' && BACK_MERGE_BASE.test(base)) {
+    const ok = new RegExp(`^Merge main into ${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} after v\\d+\\.\\d+\\.\\d+$`).test(title);
+    return ok ? [] : [`title "${title}": the merge back of main into ${base} is titled "Merge main into ${base} after ${TAG}"`];
+  }
+  return null;
+}
+
 // commits: [{ sha, parents, subject }] of the PR. Merge commits are left out: git writes them when a branch is updated.
 export function checkConventions({ branch, base, commits, title }) {
+  const release = releaseFlowProblems({ branch, base, title });
+  if (release) return release;
   const problems = [];
   const branchCheck = checkBranch(branch, { base });
   if (!branchCheck.ok) problems.push(`branch ${branch}: ${branchCheck.reason}`);
