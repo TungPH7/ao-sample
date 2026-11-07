@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext, type Page, type Route } from '@pl
 // AC10, AC11, AC12 and AC13 of Story SMP-11: the list of notes (design.md S1.11 to S1.15). Tests run in parallel on
 // one shared API, so each one makes its own titles and looks only for them; the answers that must be controlled are
 // faked with page.route (plan of SMP-2, decision 10).
-const API_NOTES = 'http://localhost:3001/notes';
+const API_NOTES = '/api/notes';
 const EMPTY = 'Chưa có ghi chú nào.';
 const LOAD_ERROR = 'Không tải được danh sách ghi chú. Vui lòng thử lại.';
 
