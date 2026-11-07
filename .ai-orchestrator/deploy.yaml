@@ -14,4 +14,6 @@ apps:
     health: /health
 smoke:
   - { app: web, path: /notes, expect_status: 200, expect_text: "Ghi chú" }
+  # Through the web to the API: the API is deployed and moved first, so this reaches the new one (review of PR #15).
+  - { app: web, path: /api/notes, expect_status: 200, expect_text: '"data"' }
   - { app: api, path: /health, expect_status: 200, expect_text: '"status":"ok"' }
