@@ -245,6 +245,7 @@ describe('when the API does not store the note', () => {
     ['a network failure', new TypeError('Failed to fetch')],
     ['a server error', json({ error: { code: 'INTERNAL_ERROR' } }, 500)],
     ['a 400 the form did not expect', json({ error: { code: 'VALIDATION_FAILED' } }, 400)],
+    ['a full store', json({ error: { code: 'NOTES_LIMIT_REACHED' } }, 409)],
   ])('AC8 shows the save error above Lưu on %s and keeps what was typed', async (_case, response) => {
     const { title, content, save } = renderForm();
     type(title, 'Mua sữa');
