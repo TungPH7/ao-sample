@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The image of apps/web/Dockerfile runs .next/standalone: the server and only the modules it uses.
+  output: "standalone",
   cacheComponents: true,
   partialPrefetching: true,
   // ADR-0002: the browser calls /api/notes on the web origin and the web forwards it to the API, so the API needs no

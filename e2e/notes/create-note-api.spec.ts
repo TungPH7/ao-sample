@@ -1,9 +1,10 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
-// AC9 sends straight to the API, not through the form (plan of SMP-2, decision 10).
+// AC9 sends straight to the API, not through the form (plan of SMP-2, decision 10): to /api/notes of the web, which
+// forwards it to the API as it is (ADR-0002), so the tests run on an environment too, where the API is not public.
 // Tests run in parallel on one shared API, so each one marks its own request with a
 // unique text and checks that no stored note holds it, instead of counting notes.
-const NOTES_URL = 'http://localhost:3001/notes';
+const NOTES_URL = '/api/notes';
 
 interface StoredNote {
   title: string;

@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page, type Route } from '@pl
 
 // AC1, AC2, AC7 and AC8 of Story SMP-7, through the form (plan of SMP-2, decision 10). Tests run in parallel on one
 // shared API, so each one makes its own title and looks only for it; none counts every note or expects an empty list.
-const API_NOTES = 'http://localhost:3001/notes';
+const API_NOTES = '/api/notes';
 const SAVE_ERROR = 'Không lưu được ghi chú. Vui lòng thử lại.';
 
 function uniqueTitle(code: string): string {

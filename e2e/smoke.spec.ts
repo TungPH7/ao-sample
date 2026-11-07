@@ -6,7 +6,8 @@ test('the home page opens the notes page', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Ghi chú' })).toBeVisible();
 });
 
-test('the API reports that it is up', async ({ request }) => {
+// @local: only the apps of an environment reach its API, so this test runs on the apps Playwright starts here.
+test('the API reports that it is up', { tag: '@local' }, async ({ request }) => {
   const response = await request.get('http://localhost:3001/health');
   expect(response.status()).toBe(200);
   expect(await response.json()).toEqual({ status: 'ok' });

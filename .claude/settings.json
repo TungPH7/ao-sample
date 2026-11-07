@@ -8,6 +8,7 @@
     "AO_DEV_APP_ID": "5514949",
     "AO_REVIEW_APP": "tungph7-ao-review",
     "AO_REVIEW_APP_ID": "5514961",
+    "AO_KIT_PEERS": "TungPH7/ao-pilot",
     "NO_UPDATE_NOTIFIER": "1"
   },
   "hooks": {

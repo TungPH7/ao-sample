@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 // AC3, AC4, AC5 and AC6 of Story SMP-10: the error of each field shows next to it (design.md S1.4 to S1.7). Tests run
 // in parallel on one shared API, so each one makes its own title and looks only for it (plan of SMP-2, decision 10).
-const API_NOTES = 'http://localhost:3001/notes';
+const API_NOTES = '/api/notes';
 const TITLE_REQUIRED = 'Vui lòng nhập tiêu đề';
 const TITLE_TOO_LONG = 'Tiêu đề tối đa 100 ký tự';
 const CONTENT_TOO_LONG = 'Nội dung tối đa 1000 ký tự';
