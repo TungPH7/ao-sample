@@ -77,5 +77,17 @@ export function createJiraClient({ cloudId, authorization, fetch = globalThis.fe
   const comment = (key, text) =>
     request('POST', `${issuePath(key)}/comment`, {}, { body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] } });
 
-  return { request, get, pages, getAll, searchAll, transition, editItem, comment };
+  // One file attached to an item, as multipart form data (release-workflow spec 2.5). Jira refuses an upload without
+  // X-Atlassian-Token: no-check; fetch writes the multipart Content-Type with its boundary.
+  async function attach(key, name, data) {
+    const path = `${issuePath(key)}/attachments`;
+    if (!write) throw new Error(`Read-only Jira client refused POST ${path}`);
+    const form = new FormData();
+    form.append('file', new Blob([data]), name);
+    const res = await fetch(new URL(`${API}/${cloudId}${path}`), { method: 'POST', headers: { Authorization: authorization, Accept: 'application/json', 'X-Atlassian-Token': 'no-check' }, body: form });
+    if (!res.ok) throw new Error(`Jira POST ${path} returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    return res.json();
+  }
+
+  return { request, get, pages, getAll, searchAll, transition, editItem, comment, attach };
 }

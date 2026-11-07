@@ -23,13 +23,20 @@ export function addedLines(diff) {
   return added;
 }
 
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A call pattern, a name that ends in (, such as xit(, counts only as a whole name: exit( holds xit( but skips no test
+// (release-workflow T19, process.exit in ao-pilot). Every other pattern counts anywhere: gitleaks and semgrep honour
+// their markers with anything glued in front, as in xgitleaks:allow and //_nosemgrep.
+const matcher = (pattern) => new RegExp(/^[\w$].*\($/.test(pattern) ? `(?<![\\w$])${escape(pattern)}` : escape(pattern));
+
 // suppressions: the suppressions block of quality/gates.yaml.
 export function findSuppressions(added, { reason_marker: marker, patterns, never }) {
-  const reasoned = new RegExp(`${marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\S`);
+  const reasoned = new RegExp(`${escape(marker)}\\s*\\S`);
+  const found = (list, text) => list.filter((pattern) => matcher(pattern).test(text));
   const problems = [];
   for (const { file, line, text } of added.filter(({ file: f }) => !NOT_CHECKED.some((glob) => matchesGlob(glob, f)))) {
-    for (const pattern of never.filter((p) => text.includes(p))) problems.push(`${file}:${line} ${pattern} is never allowed`);
-    for (const pattern of patterns.filter((p) => text.includes(p))) {
+    for (const pattern of found(never, text)) problems.push(`${file}:${line} ${pattern} is never allowed`);
+    for (const pattern of found(patterns, text)) {
       if (!reasoned.test(text)) problems.push(`${file}:${line} ${pattern} needs "${marker} <why>" on the same line`);
     }
   }

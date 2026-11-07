@@ -9,11 +9,17 @@
 //   dispatch(action)              asks GitHub to run jira-sync for an item (the second /ao-plan)
 //   pack(run, facts)              writes the context pack of a full review run; resolves its path, or null (optional)
 //   worktree                      { add(spec), remove(spec) } for a run that has a worktree (a review: the code of its PR at
-//                                 its head); add resolves { ok, path, reason }, remove { ok, reason } (optional)
-//   store                         { readState(key), writeState(key, state), writeLast(key, text) }
+//                                 its head; qa: the release that runs, with its packages); add resolves { ok, path,
+//                                 reason }, remove { ok, reason } (optional)
+//   after(run, { tree, facts })   what ao-step does once a run ends and before its worktree goes (qa: the evidence to
+//                                 Jira); resolves notes for state.json and last.md (optional)
+//   act(step)                     a script step of a release command, such as cutting the release branch; resolves notes
+//                                 for last.md. It is the one step of its command (optional)
+//   store                         { readState(key), writeState(key, state), writeLast(key, text) }; a run is written when it
+//                                 starts and again when it ends
 //   sleep(ms), now(), log(line)
 // Agents run one after another, never two at once.
-import { packNote, worktreeNote } from './prompts.mjs';
+import { packNote, qaWorktreeNote, worktreeNote } from './prompts.mjs';
 import { readRun } from './runs.mjs';
 import { decideStep } from './steps.mjs';
 
@@ -27,7 +33,7 @@ const PACKED = ['review'];
 
 // The command that starts one run: ao-agent.mjs with the role, the prompt, stream-json output, and the effort both as a
 // flag and as CLAUDE_CODE_EFFORT_LEVEL, which beats the flag and may be set in your environment (plan decision 6). It
-// carries no token: ao-agent.mjs buys the session's own.
+// carries no token: ao-agent.mjs buys the session's own. A run's own variables, such as the URL qa tests, come last.
 // CLAUDE_CODE_PROMPT_CACHE_TTL=5m: a run sends its requests seconds apart, so the five-minute cache is enough, and its
 // writes cost less than those of the one-hour cache that claude -p asks for on a subscription (Pilot 1, review of PR #4).
 export function agentCommand(run, kitDir) {
@@ -35,15 +41,16 @@ export function agentCommand(run, kitDir) {
   return {
     command: process.execPath,
     args: [script, run.role, '-p', run.prompt, '--output-format', 'stream-json', '--verbose', '--effort', run.effort, ...(run.resume ? ['--resume', run.resume] : [])],
-    env: { CLAUDE_CODE_EFFORT_LEVEL: run.effort, CLAUDE_CODE_PROMPT_CACHE_TTL: '5m' },
+    env: { CLAUDE_CODE_EFFORT_LEVEL: run.effort, CLAUDE_CODE_PROMPT_CACHE_TTL: '5m', ...run.env },
   };
 }
 
-export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, worktree, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
+export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, worktree, after, act, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
   const limits = { ...LIMITS, ...given };
   let facts = await gather();
   let decision = decide(command, facts, options);
-  const key = facts.item?.key;
+  // A release command has no work item: its report goes under the release, such as .ai/runs/v0.1.0/.
+  const key = facts.item?.key ?? facts.runKey;
   const made = [];
   let reason = null;
   let previous = null;
@@ -59,6 +66,13 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       made.push({ action: 'jira-sync', key: next.key });
       ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined }), (d) => !(d.go && d.runs[0]?.action === 'jira-sync'), limits.syncWaitMs, { sleep, now, limits }));
       if (decision.go && decision.runs[0]?.action === 'jira-sync') reason = `jira-sync ran, but ${next.key} is not done after ${Math.round(limits.syncWaitMs / 60000)} minutes: see the jira-sync and merge-gate runs on GitHub`;
+      break;
+    }
+    if (next.action) {
+      log(`${next.action} ${next.key}`);
+      made.push({ action: next.action, key: next.key, notes: await act(next) });
+      facts = await gather();
+      decision = decide(command, facts, { ...options, answers: undefined, note: undefined });
       break;
     }
     // The same run again right after it ended well means the agent did not do what the facts look for.
@@ -88,11 +102,33 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       reason = tree.reason;
       break;
     }
-    const notes = [file && packNote(file), tree && worktreeNote(tree.path, next.worktree.sha)].filter(Boolean);
+    const treeNote = tree && (next.worktree.kind === 'qa' ? qaWorktreeNote : worktreeNote)(tree.path, next.worktree.sha);
+    const notes = [file && packNote(file), treeNote].filter(Boolean);
+    const run = {
+      n,
+      command,
+      role: next.role,
+      key: next.key,
+      purpose: next.purpose,
+      effort: next.effort,
+      log: logName,
+      startedAt,
+      ...(next.resume && { resumed: true }),
+      ...(next.checkout && { checkout: next.checkout }),
+      ...(next.head && { head: next.head }),
+      ...(next.note && { note: next.note }),
+      // The release a qa run tested: /ao-ship checks its regression still holds for the head (release-workflow T15).
+      ...(next.qa && { qa: { environment: next.qa.environment, sha: next.qa.sha } }),
+    };
+    // On record from its start: a shell killed during the run leaves it unfinished, and the next command goes on in the
+    // session of its log (release-workflow T22). What its session cost so far stays, for the run that resumes it.
+    store.writeState(key, { ...state, runs: [...state.runs, { ...run, session: next.resume ?? null, outcome: 'unfinished', turns: 0, durationMs: 0, costUsd: 0, ...(resumed?.cumulative && { cumulative: resumed.cumulative }) }] });
     let lines;
     let stopped;
+    let runNotes = [];
     try {
       ({ lines, stopped } = await agent(notes.length > 0 ? { ...next, prompt: [next.prompt, ...notes].join('\n\n') } : next, { log: logName }));
+      if (after) runNotes = await after(next, { tree, facts });
     } finally {
       if (tree) {
         const removed = await worktree.remove(next.worktree);
@@ -102,12 +138,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     if (stopped) log(`${next.role} stayed alive after its result and was stopped with what it left running`);
     const read = readRun(lines, resumed);
     const record = {
-      n,
-      command,
-      role: next.role,
-      key: next.key,
-      purpose: next.purpose,
-      effort: next.effort,
+      ...run,
       session: read.session,
       outcome: read.outcome,
       turns: read.turns,
@@ -116,14 +147,9 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       tokens: read.tokens,
       cumulative: read.cumulative,
       denials: read.denials.length,
-      log: logName,
-      startedAt,
       endedAt: new Date(now()).toISOString(),
-      ...(next.resume && { resumed: true }),
       ...(stopped && { stoppedAfterResult: true }),
-      ...(next.checkout && { checkout: next.checkout }),
-      ...(next.head && { head: next.head }),
-      ...(next.note && { note: next.note }),
+      ...(runNotes.length > 0 && { notes: runNotes }),
       text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,
     };
     // state.json is written before anything else, so a stopped shell can go on from here.
@@ -187,6 +213,10 @@ export function formatDecision(decision) {
         out.push(`${i + 1}. jira-sync for ${run.key}, with your gh login${run.then?.mergeGate ? `; then merge-gate merges the docs PR #${run.then.mergeGate}` : ''}`);
         return;
       }
+      if (run.action) {
+        out.push(`${i + 1}. ${run.action} for ${run.key}, a script: no agent runs`);
+        return;
+      }
       const extras = [run.resume && 'resumes its session', run.when && `when ${run.when}`, run.scope, run.effortWhy && `effort ${run.effort}: ${run.effortWhy}`].filter(Boolean);
       out.push(`${i + 1}. ${run.role} ${run.key}, ${run.purpose}, effort ${run.effort}${extras.length ? ` (${extras.join('; ')})` : ''}`);
     });
@@ -202,7 +232,7 @@ export function formatDecision(decision) {
 export function lastReport({ command, key, made, decision, state }) {
   const all = state?.runs ?? [];
   const total = all.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
-  const rows = made.map((r) => (r.action ? `| - | jira-sync | ${r.key} | | | | | |` : `| ${r.n} | ${r.role} | ${r.key} | ${r.purpose} | ${r.effort} | ${r.outcome} | ${r.turns} turns, ${minutes(r.durationMs)} | ${usd(r.costUsd)} |`));
+  const rows = made.map((r) => (r.action ? `| - | ${r.action} | ${r.key} | | | | | |` : `| ${r.n} | ${r.role} | ${r.key} | ${r.purpose} | ${r.effort} | ${r.outcome} | ${r.turns} turns, ${minutes(r.durationMs)} | ${usd(r.costUsd)} |`));
   const text = [
     `# ${command} ${key}`,
     '',
@@ -211,7 +241,10 @@ export function lastReport({ command, key, made, decision, state }) {
     '',
     `Cost of every run on ${key} so far: ${usd(total)}.`,
     '',
-    ...made.filter((r) => r.text).flatMap((r) => [`## ${r.n}. ${r.role}: its answer`, '', r.text, '']),
+    ...made.filter((r) => r.text || r.notes?.length).flatMap((r) => [
+      ...(r.text ? [`## ${r.n}. ${r.role}: its answer`, '', r.text, ''] : []),
+      ...(r.notes?.length ? [r.action ? `## ${r.action}` : `## ${r.n}. ${r.role}: notes of the orchestrator`, '', ...r.notes.map((note) => `- ${note}`), ''] : []),
+    ]),
     decision.go ? '## Next' : '## Stopped',
     '',
     decision.go ? formatDecision(decision) : `${decision.reason}.`,

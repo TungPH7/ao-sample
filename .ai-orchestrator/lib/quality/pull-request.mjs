@@ -49,13 +49,16 @@ export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 const BLOCKING = ['Critical', 'High'];
 const FINDING_COLUMNS = ['severity', 'axis', 'where', 'finding', 'fix'];
 const EARLIER_COLUMNS = ['severity', 'where', 'finding', 'status'];
+// An earlier finding is Fixed alone or with a colon and how. "Fixed một phần" is not (Pilot 1, third review of ao-sample
+// PR #13): any other Status keeps it open.
+const FIXED = /^fixed\s*(:|$)/i;
 
 // A review report as merge-gate reads it: the role of its Role line, the rows of its Findings table, and those that
 // block the merge. Text that is not a report has no role; a report merge-gate cannot read lists problems.
 export function readReviewReport(body, roles) {
   const header = checkReviewHeader(body, roles);
   if (!header.ok) return { ok: false, problems: header.problems };
-  const { found } = sections(body);
+  const { text, found } = sections(body);
   if (!('Findings' in found)) return { ok: false, role: header.role, problems: ['the report needs a "## Findings" section'] };
   const findings = [];
   const problems = [];
@@ -66,11 +69,16 @@ export function readReviewReport(body, roles) {
     return [];
   });
   findings.push(...read(found.Findings, FINDING_COLUMNS, 'finding'));
-  // A security review of the new part only says from which commit (dev-workflow spec 2.6).
-  const since = body.match(/^Scope:\s*changes since\s+([0-9a-f]{7,40})\s*$/m)?.[1];
-  // ... and lists the Critical and High findings left open before it, each Fixed or Open. A full review judges anew.
+  // A security review of the new part only says from which commit (dev-workflow spec 2.6). A full review judges anew and
+  // clears what was open, so a Scope line a little off, or Earlier findings without one, is no full review: unreadable.
+  // The Scope line counts only above the first section, under the Role line, where the template puts it.
+  const head = text.split(/^## /m)[0];
+  const since = head.match(/^Scope:\s*changes since\s+([0-9a-f]{7,40})\s*$/m)?.[1];
+  if (!since && /^[^a-z0-9\n]*scope\b/im.test(head)) problems.push('Scope: the line must read "Scope: changes since <short SHA>"');
+  if (!since && 'Earlier findings' in found) problems.push('Earlier findings: only a report of the new part has them, under its Scope line');
+  // ... and lists the Critical and High findings left open before it, each Fixed or Open.
   const earlier = 'Earlier findings' in found ? read(found['Earlier findings'], EARLIER_COLUMNS, 'earlier finding') : [];
-  const stillOpen = since ? earlier.filter(({ severity, status }) => BLOCKING.includes(severity) && !/^fixed\b/i.test(status ?? '')) : [];
+  const stillOpen = since ? earlier.filter(({ severity, status }) => BLOCKING.includes(severity) && !FIXED.test(status ?? '')) : [];
   const blocking = [...findings.filter(({ severity }) => BLOCKING.includes(severity)), ...stillOpen];
   return { ok: problems.length === 0, role: header.role, findings, blocking, problems, ...(since && { scope: { since } }), ...(earlier.length > 0 && { earlier }) };
 }
@@ -81,19 +89,25 @@ const tableRows = (section) => section.split('\n')
   .map((line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
   .filter((cells) => cells[0].toLowerCase() !== 'severity' && !cells.every((cell) => /^:?-+:?$/.test(cell)));
 
-// The number of Critical and High findings open after each report of one role, oldest first (dev-workflow spec 2.6;
-// Pilot 1, second review of ao-sample PR #13). A full report counts its own. A report of the new part counts its own
-// and the earlier ones it lists as Open, and the open ones of the report before it that it does not list: an agent that
-// leaves one out does not clear it. An unreadable report clears nothing. reports: readReviewReport results.
-export function openCounts(reports) {
-  let before = 0;
+// What makes a finding the same one from report to report: its Where and Finding, whatever their case, spaces and
+// Markdown. The prompt of the next review gives them on one line, with / for | (lib/workflow/prompts.mjs).
+const identity = ({ where, finding }) => `${where} ${finding}`.replace(/[*_`]/g, '').replaceAll('|', '/').replace(/\s+/g, ' ').trim().toLowerCase();
+
+// The Critical and High findings open after each report of one role, oldest first (dev-workflow spec 2.6; Pilot 1,
+// second and third review of ao-sample PR #13). A full report has its own. A report of the new part has its own, the
+// earlier ones it lists as Open, and those of the report before it that no row of its names: an agent that leaves one
+// out, or rewords it, does not clear it. An unreadable report clears nothing. reports: readReviewReport results.
+export function openFindings(reports) {
+  let open = [];
   return reports.map((report) => {
-    if (!report.ok) return before;
-    const listed = report.scope ? (report.earlier ?? []).filter(({ severity }) => BLOCKING.includes(severity)).length : 0;
-    before = report.blocking.length + (report.scope ? Math.max(0, before - listed) : 0);
-    return before;
+    if (!report.ok) return open;
+    const listed = new Set((report.earlier ?? []).filter(({ severity }) => BLOCKING.includes(severity)).map(identity));
+    open = [...report.blocking, ...(report.scope ? open.filter((finding) => !listed.has(identity(finding))) : [])];
+    return open;
   });
 }
+
+export const openCounts = (reports) => openFindings(reports).map((open) => open.length);
 
 // The first heading and the Role line that tell merge-gate which role wrote a review report.
 export function checkReviewHeader(body, roles) {

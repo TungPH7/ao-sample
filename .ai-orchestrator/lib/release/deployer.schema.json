@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "/etc/ao/deployer.yaml",
+  "description": "What the deployer on the VPS deploys (release-workflow spec 2.3, 2.11). Paths only, never a secret; names and hosts that reach a path, a URL or the Caddyfile are plain.",
+  "type": "object",
+  "required": ["state_dir", "secrets_dir", "caddyfile", "basic_auth_file", "app", "apps", "approvers", "projects"],
+  "additionalProperties": false,
+  "properties": {
+    "state_dir": { "$ref": "#/$defs/path" },
+    "secrets_dir": { "$ref": "#/$defs/path" },
+    "caddyfile": { "$ref": "#/$defs/path" },
+    "basic_auth_file": { "$ref": "#/$defs/path" },
+    "jira_token_file": { "$ref": "#/$defs/path" },
+    "app": {
+      "type": "object",
+      "required": ["id", "key_file"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "key_file": { "$ref": "#/$defs/path" }
+      }
+    },
+    "apps": {
+      "type": "object",
+      "required": ["dev", "review"],
+      "additionalProperties": false,
+      "properties": {
+        "dev": { "$ref": "#/$defs/slug" },
+        "review": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "approvers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$" }
+    },
+    "projects": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "repo", "space", "hosts"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "maxLength": 20, "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$" },
+          "repo": { "type": "string", "pattern": "^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$" },
+          "space": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*$" },
+          "hosts": {
+            "type": "object",
+            "required": ["development", "staging", "production"],
+            "additionalProperties": false,
+            "properties": {
+              "development": { "$ref": "#/$defs/host" },
+              "staging": { "$ref": "#/$defs/host" },
+              "production": { "$ref": "#/$defs/host" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "path": {
+      "description": "An absolute path; a Windows drive path too, for a dry run on your machine.",
+      "type": "string",
+      "pattern": "^(/|[A-Za-z]:/)[A-Za-z0-9._/~ -]*$"
+    },
+    "slug": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" },
+    "host": { "type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" }
+  }
+}

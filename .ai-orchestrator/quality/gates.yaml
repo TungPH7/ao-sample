@@ -46,6 +46,16 @@ merge_method:
   bugfix: squash
   hotfix: squash
 
+# The PR of a release branch into main, and the PR that merges main back into develop or the open release branch
+# (release-workflow spec 2.7). merge-gate merges both with a merge commit, so each release keeps its history on main. A
+# release PR needs green CI and your approval on its head; after it merges, merge-gate tags the merge commit and opens
+# the merge back. A merge back needs only green CI and no conflict: every commit of main passed gate ③ or gate ⑤.
+release_pull_requests:
+  merge_method: merge
+  tag: v<VERSION>
+  back_merge_bases: [develop, "release/*"]
+  back_merge_after_release: develop
+
 # Files an agent may not edit, except the roles listed as editors. A PR of an agent that touches one is never merged by
 # merge-gate: you read the diff and merge it yourself.
 protected_paths:
@@ -64,7 +74,11 @@ security_review:
     - "**/package.json"
     - "**/package-lock.json"
     - "**/Dockerfile*"
-    - "**/docker-compose*.yml"
+    - "**/docker-compose*.{yml,yaml}"
+    - "**/compose*.{yml,yaml}"
+    - "**/.npmrc"
+    - "**/pnpm-lock.yaml"
+    - "**/yarn.lock"
     - "**/.env*"
     - "**/next.config.*"
     - "**/main.ts"
@@ -79,6 +93,7 @@ security_review:
     - "**/*.strategy.*"
     - "**/*.dto.*"
     - "**/middleware.*"
+    - "**/proxy.*"
     - "**/route.*"
     - "**/actions.*"
     # who the user is, and secrets
@@ -93,6 +108,28 @@ security_review:
     - "**/migrations/**"
     - "**/*.sql"
   lower_effort: high
+
+# A PR that copies a kit another project reviewed in full (kit-copy-review spec 2.2, 2.3): ao-step compares it with the
+# reviewed head and writes both reports, with no agent. A project's own files, such as .claude/settings.json and
+# .ai-orchestrator/deploy.yaml, are in none of these lists, so a PR that changes one is reviewed as usual.
+kit_copy:
+  # The same in every project, compared both ways.
+  same:
+    - ".ai-orchestrator/{agents,contract,docs,lib,quality,scripts,templates,tracker}/**"
+    - ".ai-orchestrator/package*.json"
+    - ".claude/hooks/**"
+    - ".githooks/**"
+    - ".mcp.json"
+    - ".jira/config.yml"
+    - ".github/workflows/{ci,jira-sync,merge-gate}.yml"
+  # A project adds the skills of its stack, so only the files the PR changes are compared.
+  same_when_changed: [".claude/skills/**"]
+  # They hold the space key and the stack skills of the project: ao-step renders them again.
+  rendered: [".claude/agents/**", ".claude/rules/ai-orchestrator.md"]
+  # A copy may point only at the newest PR of the other project on this path and branch, so it cannot go back to an older
+  # kit.
+  newest_path: .ai-orchestrator/lib
+  newest_branch: develop
 
 # The docs PR of an Epic (dev-workflow spec 2.4): every file it changes is under these paths, its head is this branch,
 # ao-dev opened it, and <EPIC> is an Epic. merge-gate merges it without reviews or approval once the Epic is past this

@@ -314,6 +314,8 @@ function board(contract, mapping) {
     '',
     '**Cột:** Board settings → **Columns** (nếu menu thu gọn, bấm **Layout** để mở thêm).',
     '',
+    'Board mới không có mục **Columns** trong Board settings; trang **Details** của nó ghi "This space uses the modern Jira board". Với board này: trên trang board, bấm **More actions** (•••) → **Configure columns** (đối chiếu giao diện). Trong hộp đó, ô **Backlog** là Kanban backlog, ô **Hidden statuses** là Unmapped statuses, và số tối đa đặt ở biểu tượng cạnh tên cột. Sửa xong thì bấm **Publish**. Sau khi đổi workflow scheme, trang board có thể ẩn các cột của template, vì chúng chỉ còn status cũ; hộp **Configure columns** vẫn hiện đủ. Bấm **Publish** xong, chạy `jira:check` ở bước Kiểm lại: ở Pilot 1, lần Publish đầu để `New` nằm nhầm trong cột `In Review`.',
+    '',
     '1. Sửa danh sách cột cho đúng tên và thứ tự bên dưới: đổi tên cột có sẵn, thêm cột bằng nút **+** bên phải các cột, xóa cột thừa.',
     `2. Kéo status ${backlog.statuses.map(code).join(', ')} vào ô **Kanban backlog** (đây là cột ${code(backlog.name)}). Item ở đây không hiện trên board; xem chúng ở tab **List** của space.`,
     '3. Kéo từng status còn lại vào đúng cột ghi bên dưới. Status không dùng để lại ở ô **Unmapped statuses**.',

@@ -46,6 +46,16 @@ export function readRun(lines, previous) {
   };
 }
 
+// A run is on record from its start (lib/workflow/runner.mjs). One killed with its shell never got its session, which
+// its log holds: readLog(name) gives the lines of a log of the run's folder. It returns the state it was given when
+// there is no such run, or the run died before its first line.
+export function withLoggedSession(state, readLog) {
+  const last = state?.runs.at(-1);
+  if (!last || last.session || !last.log) return state;
+  const { session } = readRun(readLog(last.log));
+  return session ? { ...state, runs: [...state.runs.slice(0, -1), { ...last, session }] } : state;
+}
+
 function outcomeOf(result) {
   if (!result) return 'unfinished';
   if (result.subtype === 'error_max_turns') return 'max-turns';

@@ -86,6 +86,7 @@ stages:
   - id: release-cut
     name: "Cắt release lên Staging, khi bạn yêu cầu"
     roles: [devops]
+    note: "Script của ao-step làm thay devops: tính điểm cắt, tạo nhánh release và gắn Fix Version, khi bạn gõ /ao-release <vX.Y.0> <sha>"
     input: "Điểm cắt trên develop có ít nhất một item Done chưa release; không có nhánh release/* nào đang mở (mục 2.7)"
     guards: [cut-point-ready, no-open-release]
     outputs:
@@ -109,7 +110,7 @@ stages:
   - id: hotfix
     name: "Sửa gấp trên Production"
     roles: [fe-dev, be-dev, qa, devops]
-    note: "fe-dev hoặc be-dev sửa"
+    note: "fe-dev hoặc be-dev sửa; gate ⑤ là yêu cầu deploy Production do bạn tạo bằng /ao-ship vX.Y.Z"
     input: "Bug Critical/High trên Production"
     outputs:
       other: "Nhánh hotfix/..., tag bản vá"
@@ -151,7 +152,7 @@ release_rules:
   - title: "Release theo quyết định của bạn, không theo lịch cố định"
     text: "Bạn cắt release khi thấy đủ giá trị để đưa lên, ví dụ khi mọi Story của một Epic đã Done, hoặc khi khách cần sớm một tính năng. Lúc lên Production cũng do bạn quyết ở cổng ⑤."
   - title: "Điểm cắt"
-    text: "develop nhận merge liên tục, nên lúc bạn muốn release thường vẫn còn item đã merge nhưng chưa Done. Vì vậy nhánh release tách từ điểm cắt, không từ commit mới nhất của develop. Điểm cắt là commit mới nhất trên lịch sử develop sao cho mọi item có commit tính tới điểm đó đều đã Done, và không item nào trong số đó còn commit nằm sau điểm cắt. Item nằm sau điểm cắt vào bản kế tiếp. release-workflow tính điểm cắt và đưa bạn danh sách item để duyệt ở cổng ④."
+    text: "develop nhận merge liên tục, nên lúc bạn muốn release thường vẫn còn item đã merge nhưng chưa Done. Vì vậy nhánh release tách từ điểm cắt, không từ commit mới nhất của develop. Điểm cắt là commit mới nhất trên lịch sử develop sao cho mọi item có commit tính tới điểm đó đều đã Done, và không item nào trong số đó còn commit nằm sau điểm cắt. Key của Epic không tính: Epic không được release, item con của nó mới được, nên commit tài liệu của Epic đi theo điểm cắt chứa nó. Item nằm sau điểm cắt vào bản kế tiếp. release-workflow tính điểm cắt và đưa bạn danh sách item để duyệt ở cổng ④."
   - title: "Mỗi lúc chỉ có một nhánh release/* mở"
     text: "Muốn cắt bản mới thì bản đang ở Staging phải lên Production xong trước."
   - title: "Fix Version"
