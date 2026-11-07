@@ -1,0 +1,17 @@
+# How the deployer of the kit builds, runs and smoke-tests ao-sample on the VPS (release-workflow spec 2.3, 2.9; Pilot 2
+# spec 2.1). The web is the only public app; it reaches the API as http://api:3001 on the network of the environment,
+# a value its image holds from the build. Neither app reads a variable from /etc/ao/secrets/sample/<environment>.env.
+# The health of the web is /notes, since / redirects there and the deployer wants a 200.
+apps:
+  web:
+    dockerfile: apps/web/Dockerfile
+    port: 3000
+    health: /notes
+    public: true
+  api:
+    dockerfile: apps/api/Dockerfile
+    port: 3001
+    health: /health
+smoke:
+  - { app: web, path: /notes, expect_status: 200, expect_text: "Ghi chú" }
+  - { app: api, path: /health, expect_status: 200, expect_text: '"status":"ok"' }
