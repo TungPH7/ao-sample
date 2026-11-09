@@ -62,6 +62,11 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 - AC12: Given tiêu đề hoặc nội dung có đoạn như `<b>đậm</b>` hay `<script>alert(1)</script>`, When ghi chú hiện trong danh sách, Then thấy đúng từng ký tự đã nhập, không thành chữ đậm và không chạy mã.
 - AC13: Given API không trả được danh sách, When mở trang Ghi chú, Then thấy "Không tải được danh sách ghi chú. Vui lòng thử lại." thay cho danh sách.
 
+**Story: Giới hạn số ghi chú.** Là người dùng, tôi muốn ứng dụng giữ tối đa 1000 ghi chú để ứng dụng vẫn chạy và tôi vẫn đọc được các ghi chú đã có, kể cả khi có người tạo rất nhiều ghi chú.
+
+- AC14: Given kho đã có 1000 ghi chú, When nhập một ghi chú hợp lệ rồi bấm Lưu, Then không có ghi chú nào được lưu, thấy "Không lưu được ghi chú. Vui lòng thử lại." như AC8, và tiêu đề, nội dung đã nhập vẫn còn nguyên trong form.
+- AC15: Given kho đã có 1000 ghi chú và một lần lưu vừa bị từ chối như AC14, When mở hoặc tải lại trang Ghi chú, Then thấy đủ 1000 ghi chú, mới nhất ở đầu, và không có ghi chú vừa bị từ chối.
+
 ### Out of Scope
 
 - Sửa, xóa, tìm kiếm, lọc ghi chú, và trang xem chi tiết một ghi chú.
@@ -72,7 +77,7 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 
 ### Non-functional requirements
 
-**Phạm vi chạy.** Ứng dụng chỉ chạy ở máy dev và trong CI. Môi trường Development của Pilot là một bước deploy giả lập (`deploy.yml` chỉ in ra commit), nên API không chạy ở nơi công khai nào. Các giới hạn dưới đây đặt theo phạm vi đó. Muốn đưa ứng dụng lên một môi trường công khai thì cần một Epic riêng, vì khi đó phải có thêm giới hạn tần suất, giới hạn số ghi chú và lưu bền vững.
+**Phạm vi chạy.** Ứng dụng chạy ở máy dev, trong CI, và từ SMP-17 trên VPS ở ba môi trường Development, Staging và Production, do deployer của kit build và chạy. Chỉ web ra Internet; API nằm trong mạng nội bộ của môi trường, nhưng ai mở được web cũng gọi được API qua đường `/api/notes` của web. Development và Staging đòi một tài khoản basic auth dùng chung; Production công khai, ai cũng mở được mà không cần đăng nhập. Mỗi lần deploy chạy một API mới với kho rỗng, nên ghi chú của môi trường đó mất, như khi API khởi động lại. Các giới hạn dưới đây đặt theo phạm vi đó: kho giữ tối đa 1000 ghi chú (AC14, AC15), để không ai làm hết bộ nhớ của VPS dùng chung. Giới hạn tần suất, header bảo mật và lưu bền vững chưa có; chúng thuộc Epic SMP-19. Rủi ro còn lại cho tới khi đó nằm ở mục Bảo mật.
 
 **Hiệu năng.** Khối lượng tính toán là tối đa 1000 ghi chú, mỗi ghi chú dài tới giới hạn của mục Rules.
 
@@ -94,7 +99,8 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 - **Lỗi trả về:** mọi lỗi có cùng một dạng JSON. Lỗi 400 nêu từng trường sai bằng mã máy đọc được và không lặp lại giá trị đã gửi. Lỗi 500 chỉ có một thông báo chung, không có stack trace. JSON hỏng trả 400 với thông báo cố định: hiện Nest trả nguyên câu lỗi của `JSON.parse`, kèm một đoạn thân yêu cầu (đã thử trên `apps/api`).
 - **Log:** không ghi tiêu đề, nội dung hay thân yêu cầu vào log (mục Boundaries). Nếu có log yêu cầu, nó chỉ gồm method, đường dẫn, mã trạng thái và thời gian xử lý. Lỗi 500 được ghi stack vào log của máy chủ, nhưng không kèm thân yêu cầu.
 - **CORS:** không mở cho mọi origin (`*`). Nếu trình duyệt gọi thẳng API thì chỉ mở cho origin của web, đọc từ biến môi trường, mặc định `http://localhost:3000`. Plan chọn giữa gọi thẳng API và đi qua máy chủ web.
-- **Không làm trong Epic này**, do phạm vi chạy: giới hạn tần suất, header bảo mật (CSP, helmet), giới hạn số ghi chú. Lớp chống XSS chính là việc React escape chữ.
+- **Không làm trong Epic này:** giới hạn tần suất và header bảo mật (CSP, helmet); cả hai thuộc Epic SMP-19, cùng với lưu bền vững. Giới hạn số ghi chú thì đã có: kho giữ tối đa 1000 ghi chú (AC14, AC15). Lớp chống XSS chính là việc React escape chữ.
+- **Rủi ro còn lại cho tới SMP-19:** Production không có đăng nhập hay giới hạn tần suất, nên bất kỳ ai cũng lấp đầy được kho bằng 1000 lần lưu, trong chưa tới một phút. Từ đó không ai tạo được ghi chú nữa: form hiện lỗi lưu của AC8, nhưng thử lại không bao giờ thành công. Kho không có cách xóa ghi chú, nên cách gỡ duy nhất là khởi động lại API, và việc đó làm mất mọi ghi chú.
 
 **Dữ liệu và thời gian lưu.**
 
@@ -108,7 +114,7 @@ Quy tắc của một ghi chú. Form và API áp dụng cùng một bộ quy t�
 - **Thứ tự:** mới nhất trước, theo thứ tự API nhận yêu cầu. Hai ghi chú tạo trong cùng một mili giây vẫn đúng thứ tự tạo, nên không chỉ sắp theo `createdAt`.
 - **Thời gian tạo trên trang:** web đổi `createdAt` sang giờ của máy người dùng và hiện dạng `dd/MM/yyyy HH:mm`, 24 giờ. Việc đổi giờ chạy ở trình duyệt, không ở máy chủ web, để giờ hiện theo múi giờ của người dùng.
 - **Gửi lại:** `POST` không idempotent: gửi lại là tạo thêm một ghi chú. Form chặn gửi đôi trong lúc chờ (AC7) và không tự gửi lại khi lỗi. Một rủi ro được chấp nhận trong Epic này: mạng đứt sau khi API đã lưu, người dùng thấy lỗi lưu, bấm Lưu lại, và có hai ghi chú giống nhau. Epic không dùng `Idempotency-Key`, vì không có chỗ nào tự gửi lại yêu cầu.
-- **Bộ nhớ:** 1000 ghi chú dài tối đa chiếm khoảng 5 MB, nên trong phạm vi chạy này không cần giới hạn số ghi chú.
+- **Bộ nhớ:** kho giữ tối đa 1000 ghi chú, một hằng số có tên trong code của API. Ghi chú thứ 1000 vẫn được lưu; khi kho đã đủ 1000 thì `POST` không lưu gì và trả lỗi 409 với mã `NOTES_LIMIT_REACHED` (AC14), còn `GET` vẫn trả đủ 1000 ghi chú (AC15). Kho không xóa hay đẩy ghi chú cũ ra; nó chỉ trống lại khi API khởi động lại. 1000 ghi chú dài tối đa chiếm khoảng 5 MB, nên kho đầy không làm hết bộ nhớ của VPS dùng chung.
 
 ## Tech Stack
 
