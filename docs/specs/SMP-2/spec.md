@@ -154,7 +154,7 @@ apps/api/src/notes/          → module notes: controller, service, kho trong b�
 apps/api/test/               → integration test của API: notes.e2e-spec.ts
 apps/web/src/app/notes/      → trang Ghi chú (/notes): form tạo và danh sách; test *.test.tsx cạnh file
 apps/web/src/app/page.tsx    → trang chủ (/), chuyển tới /notes
-e2e/notes/                   → E2E Playwright, một test cho mỗi tiêu chí AC1–AC13
+e2e/notes/                   → E2E Playwright, một test cho mỗi tiêu chí AC1–AC15
 docs/specs/SMP-2/            → spec.md, design.md, plan.md của Epic
 ```
 
@@ -183,7 +183,7 @@ test('AC3 shows an error next to the title when it is empty', async ({ page }) =
 
 - **Unit, viết theo TDD cho mỗi Story** (Vitest): quy tắc kiểm tra tiêu đề và nội dung, gồm các biên 0, 1, 100, 101 và 1000, 1001 ký tự, chữ có dấu (cả khi gõ ở dạng NFD), khoảng trắng, emoji ghép (👍🏽 tính 2 ký tự), xuống dòng `\r\n` và `\r` (tính 1 ký tự và được lưu thành `\n`); kho trong bộ nhớ và thứ tự mới nhất lên đầu. Ở `apps/api/src/**/*.spec.ts` và `apps/web/src/**/*.test.tsx`.
 - **Integration, viết theo TDD cho mỗi Story**: API qua supertest ở `apps/api/test/notes.e2e-spec.ts`, cho tạo hợp lệ, từng loại lỗi 400 và danh sách, và cho việc API lưu giá trị đã chuẩn hóa (gửi NFD và `\r\n`, nhận lại NFC và `\n`); form và danh sách của web với Testing Library, API được giả lập.
-- **E2E** (Playwright, `e2e/notes/`): một test cho mỗi tiêu chí AC1–AC13, tên bắt đầu bằng mã tiêu chí. AC9 gửi yêu cầu thẳng tới API bằng `request`, như `e2e/smoke.spec.ts`.
+- **E2E** (Playwright, `e2e/notes/`): một test cho mỗi tiêu chí AC1–AC15, tên bắt đầu bằng mã tiêu chí. AC9 gửi yêu cầu thẳng tới API bằng `request`, như `e2e/smoke.spec.ts`.
 - **Kho dùng chung khi chạy E2E:** Playwright chạy song song (`fullyParallel`) trên cùng một tiến trình API, nên test không được giả định danh sách trống hay đếm tổng số ghi chú; mỗi test dùng tiêu đề riêng của nó. AC7, AC8, AC10 và AC13 cần kiểm soát được trạng thái hoặc câu trả lời của API; plan của `sa` nói cách làm, trong giới hạn của mục Boundaries.
 
 ## Boundaries
@@ -194,7 +194,7 @@ test('AC3 shows an error next to the title when it is empty', async ({ page }) =
 
 ## Success Criteria
 
-- Hai Story trên đạt DoD, và E2E test của từng tiêu chí AC1–AC13 đều pass trên môi trường Development.
+- Ba Story trên đạt DoD, và E2E test của từng tiêu chí AC1–AC15 đều pass trên môi trường Development.
 - Mọi yêu cầu sai quy tắc ở mục Rules, dù qua form hay gửi thẳng tới API, đều không tạo ra ghi chú.
 - Mỗi thông báo lỗi ở mục Rules hiện đúng nguyên văn, đúng chỗ, và được gắn với ô của nó.
 - Smoke test sẵn có (`e2e/smoke.spec.ts`) vẫn pass.
