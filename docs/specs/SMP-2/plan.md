@@ -35,6 +35,7 @@ User story "Tạo ghi chú" của SPEC (AC1–AC9) được tách thành hai Sto
    - `list()` trả bản sao đảo ngược, nên mới nhất lên trước, kể cả hai ghi chú cùng mili giây.
    - `id` sinh bằng `crypto.randomUUID()`; `createdAt` là `new Date().toISOString()` lúc API nhận yêu cầu.
    - Kho là provider singleton trong `NotesModule`, chạy trong một tiến trình API duy nhất.
+   - Kho giữ tối đa 1000 ghi chú, hằng số `MAX_NOTES` trong `notes.store.ts` (Story 7, SMP-18). Ghi chú thứ 1000 vẫn được lưu. Khi kho đã đủ, `add()` trả `false` và không lưu gì, rồi service ném `NotesLimitReachedException`, tức 409 `NOTES_LIMIT_REACHED`. Kho không xóa hay đẩy ghi chú cũ ra; nó chỉ trống lại khi API khởi động lại.
 6. **Trang `/notes` là khung tĩnh, danh sách tải ở trình duyệt.**
    - `notes/page.tsx` là Server Component không lấy dữ liệu: chỉ có `main`, h1 và `<NotesView />`.
    - Form và danh sách là Client Component. Danh sách gọi `GET /api/notes` một lần sau khi trang hydrate. Không `use cache`, không fetch ở máy chủ web, nên `cacheComponents` không cache gì; thời gian tạo được đổi giờ ngay ở trình duyệt.
@@ -144,6 +145,7 @@ Trình duyệt gọi `POST /api/notes` trên web.
 | 3 | `Content-Type` không phải `application/json`, hoặc thiếu | 415 | `UNSUPPORTED_MEDIA_TYPE` |
 | 4 | Thân JSON không phải object, như mảng | 400 | `INVALID_BODY` |
 | 5 | Sai quy tắc theo `checkNote` | 400 | `VALIDATION_FAILED`, kèm `fields` |
+| 6 | Thân hợp lệ nhưng kho đã có `MAX_NOTES` (1000) ghi chú (quyết định 5, Story 7) | 409 | `NOTES_LIMIT_REACHED` |
 
 ```json
 { "error": { "code": "VALIDATION_FAILED", "message": "Request validation failed.", "fields": [{ "field": "title", "code": "TOO_LONG" }, { "field": "content", "code": "INVALID_TYPE" }] } }
@@ -157,12 +159,13 @@ Trình duyệt gọi `POST /api/notes` trên web.
 ```ts
 export type ApiErrorCode =
   | 'VALIDATION_FAILED' | 'INVALID_BODY' | 'NOT_FOUND' | 'PAYLOAD_TOO_LARGE'
-  | 'UNSUPPORTED_MEDIA_TYPE' | 'REQUEST_FAILED' | 'INTERNAL_ERROR';
+  | 'UNSUPPORTED_MEDIA_TYPE' | 'NOTES_LIMIT_REACHED' | 'REQUEST_FAILED' | 'INTERNAL_ERROR';
 export interface FieldError { field: string; code: string } // NoteFieldError khớp kiểu này
 export interface ApiErrorBody { error: { code: ApiErrorCode; message: string; fields?: FieldError[] } }
 export class ValidationFailedException extends BadRequestException {
   constructor(readonly fields: FieldError[]) { super(); }
 }
+export class NotesLimitReachedException extends ConflictException {} // kho đã đủ MAX_NOTES ghi chú
 ```
 
 `ApiExceptionFilter` đổi exception như sau. `message` luôn đúng nguyên văn cột cuối.
@@ -170,6 +173,7 @@ export class ValidationFailedException extends BadRequestException {
 | Exception nhận được | Mã trạng thái | `code` | `message` |
 |---|---|---|---|
 | `ValidationFailedException` | 400 | `VALIDATION_FAILED` (kèm `fields`) | `Request validation failed.` |
+| `NotesLimitReachedException`. Một `ConflictException` khác vẫn theo dòng "4xx khác" | 409 | `NOTES_LIMIT_REACHED` | `The limit of stored notes is reached.` |
 | `HttpException` 400 khác, kể cả JSON hỏng | 400 | `INVALID_BODY` | `Request body must be a JSON object.` |
 | `HttpException` 404, kể cả đường dẫn lạ | 404 | `NOT_FOUND` | `Resource not found.` |
 | `HttpException` 413 | 413 | `PAYLOAD_TOO_LARGE` | `Request body is too large.` |
@@ -332,6 +336,27 @@ Story 5 và Story 6 cùng phụ thuộc Story 4, và không sửa chung file nà
 - [ ] Mọi thông báo lỗi của mục Rules hiện đúng nguyên văn, đúng chỗ, và được gắn với ô của nó.
 - [ ] Đã đo tay ba chỉ số hiệu năng của NFR và ghi kết quả vào PR của Story 4 và Story 6.
 
+### Phase 4: Giới hạn số ghi chú
+
+Thêm sau khi plan được duyệt. Bạn duyệt SMP-18 trực tiếp khi nó còn là Task, rồi ngày 2026-11-09 đổi nó thành Story của Epic, theo finding High của `reviewer` trên PR #16.
+
+- [ ] Story 7 (SMP-18): Giới hạn số ghi chú (AC14, AC15) · be-dev
+  - Không có Sub-task: web không đổi code, chỉ thêm test. Phạm vi, 4 file code:
+    - `apps/api/src/notes/notes.store.ts`: `MAX_NOTES = 1000`; `add()` trả `false` khi kho đã đủ (quyết định 5).
+    - `apps/api/src/notes/notes.service.ts`: kho từ chối thì ném `NotesLimitReachedException`, sau mọi bước kiểm tra thân.
+    - `apps/api/src/common/api-error.ts` và `apps/api/src/common/api-exception.filter.ts`: mã `NOTES_LIMIT_REACHED`, 409, như mục "Dạng lỗi chung" của API Contract. Chỉ thêm mã, không đổi mã cũ.
+  - Hợp đồng: dòng 6 của bảng lỗi `POST /notes`. Web không đọc thân lỗi (quyết định 8), nên 409 hiện lỗi lưu [S1.8] như AC8.
+  - Test:
+    - Unit cho kho và service: ghi chú thứ 1000 vẫn được lưu; ghi chú thứ 1001 bị từ chối và kho không đổi; thân sai trên kho đầy vẫn trả 400 `VALIDATION_FAILED`.
+    - Integration `apps/api/test/notes.e2e-spec.ts`: kho đầy thì `POST` trả 409 `NOTES_LIMIT_REACHED` và không lưu gì; `GET` vẫn trả đủ 1000 ghi chú, mới nhất trước.
+    - Integration của form: câu trả lời 409 hiện lỗi lưu và giữ nguyên dữ liệu.
+    - E2E `AC14 …` và `AC15 …`, không làm đầy kho thật vì kho dùng chung (quyết định 10): AC14 giả 409 của `POST` bằng `route.fulfill`, như test AC8; AC15 giả câu trả lời `GET` có 1000 ghi chú.
+  - Design: S1.8, không đổi giao diện. Phụ thuộc: Task 1 và Story 4.
+
+### Checkpoint: Giới hạn số ghi chú
+
+- [ ] E2E AC14, AC15 và smoke, kể cả smoke check `GET /api/notes` qua web của `.ai-orchestrator/deploy.yaml`, đều pass trên môi trường Development.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -340,7 +365,7 @@ Story 5 và Story 6 cùng phụ thuộc Story 4, và không sửa chung file nà
 | Form và API đếm ký tự khác nhau | Low | Cùng một hàm (ADR-0001). Lỡ khác thì API trả 400, web hiện lỗi lưu và giữ dữ liệu, không tạo ghi chú sai |
 | E2E chập chờn vì chạy song song trên một kho dùng chung | Medium | Mỗi test có tiêu đề riêng, không đếm tổng, so vị trí tương đối. AC10 và AC13 giả lập câu trả lời (quyết định 10) |
 | Thêm một `package-lock.json` trong `apps/web` làm đổi thư mục gốc của Turbopack, alias hỏng | Low | Đặt `turbopack.root` về gốc repo (ADR-0001). `npm run build` trong CI bắt được ngay |
-| `API_URL` bị ghi vào bản build production lúc `next build` | Low | Ghi trong ADR-0002. Deploy của Pilot là giả lập. Đổi API thì build lại |
+| `API_URL` bị ghi vào bản build production lúc `next build` | Low | Ghi trong ADR-0002. Từ SMP-17, deployer của kit build và chạy app trên VPS ở Development và Staging, cả hai sau basic auth, và ở Production, công khai; `apps/web/Dockerfile` ghi `API_URL=http://api:3001`, alias của API trong mạng của môi trường, giống nhau ở cả ba. Đổi API thì build lại |
 | Ở `next dev`, Strict Mode gửi hai `GET` khi mở trang | Low | Effect hủy yêu cầu cũ khi cleanup. Số yêu cầu của NFR được kiểm ở integration test, không đếm ở E2E |
 | Lỗi 400 của body-parser lộ đoạn thân yêu cầu nếu filter để lọt `message` | High | Task 1 có effort xhigh; filter không bao giờ đọc `message` của exception; test có chuỗi bí mật |
 | Mạng đứt sau khi API đã lưu, người dùng bấm Lưu lại và có hai ghi chú giống nhau | Low | SPEC chấp nhận rủi ro này (NFR, mục Gửi lại). Form chặn gửi đôi trong lúc chờ (AC7) |

@@ -1,7 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
-import { ValidationFailedException } from '../common/api-error.js';
+import {
+  NotesLimitReachedException,
+  ValidationFailedException,
+} from '../common/api-error.js';
 import { NotesService } from './notes.service.js';
-import { NotesStore } from './notes.store.js';
+import { MAX_NOTES, NotesStore } from './notes.store.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -145,6 +148,28 @@ describe('NotesService', () => {
       expect((error as ValidationFailedException).fields).toStrictEqual([
         { field: 'title', code: 'REQUIRED' },
       ]);
+    });
+  });
+
+  describe('create when the store is full', () => {
+    beforeEach(() => {
+      for (let i = 0; i < MAX_NOTES; i++) {
+        service.create({ title: `N${i}` });
+      }
+    });
+
+    it('throws NotesLimitReachedException and stores nothing', () => {
+      const error = thrownBy(() => service.create({ title: 'One too many' }));
+
+      expect(error).toBeInstanceOf(NotesLimitReachedException);
+      expect(store.list()).toHaveLength(MAX_NOTES);
+      expect(store.list()[0].title).toBe(`N${MAX_NOTES - 1}`);
+    });
+
+    it('still answers the error of a wrong body first', () => {
+      const error = thrownBy(() => service.create({ title: '' }));
+
+      expect(error).toBeInstanceOf(ValidationFailedException);
     });
   });
 

@@ -15,7 +15,11 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ApiExceptionFilter } from './api-exception.filter.js';
-import { FieldError, ValidationFailedException } from './api-error.js';
+import {
+  FieldError,
+  NotesLimitReachedException,
+  ValidationFailedException,
+} from './api-error.js';
 
 // The request body a client sent; nothing of it may reach the answer or the log.
 const BODY_MARKER = 'body-marker-7f3a9c';
@@ -189,6 +193,20 @@ describe('ApiExceptionFilter', () => {
         error: {
           code: 'PAYLOAD_TOO_LARGE',
           message: 'Request body is too large.',
+        },
+      });
+    });
+  });
+
+  describe('NotesLimitReachedException', () => {
+    it('answers 409 NOTES_LIMIT_REACHED with its fixed message', () => {
+      const answer = catchWithFilter(new NotesLimitReachedException());
+
+      expect(answer.statusCode).toBe(409);
+      expect(answer.body).toStrictEqual({
+        error: {
+          code: 'NOTES_LIMIT_REACHED',
+          message: 'The limit of stored notes is reached.',
         },
       });
     });
