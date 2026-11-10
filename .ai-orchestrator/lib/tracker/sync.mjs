@@ -2,6 +2,7 @@
 // changes made with the CI token. scripts/jira-sync.mjs only reads the event and builds the clients.
 import { extractKeys, parseBranch } from './conventions.mjs';
 import { planDorLine, tickDorLine } from './dor.mjs';
+import { adfText } from './facts.mjs';
 import { ciAccount, clearsMergeGateFlag } from './flags.mjs';
 import { reconcile } from './reconcile.mjs';
 
@@ -48,6 +49,7 @@ function waitingForDeployment(contract, mapping, space) {
 // closes moves no item: it only clears the Needs you flag merge-gate raised for it (dev-workflow spec 2.7); `kept`
 // says why a flag stays.
 export async function syncEvent({ event, payload, jira, github, contract, mapping, space, approvers = [] }) {
+  if (event === 'deployment_status' && FAILED.includes(payload.deployment_status.state)) return deploymentFailed(payload, { jira, github, space });
   const keys = await itemsOf(event, payload, { jira, contract, mapping, space });
   const actions = [];
   const waiting = [];
@@ -76,6 +78,87 @@ export async function syncEvent({ event, payload, jira, github, contract, mappin
 const CLEAR = 'clear-needs-you';
 const NOT_FLAGGED = 'it is not flagged';
 
+// release-workflow spec 2.4, 2.9, 2.10: the deployer reports `failure` when a new release ran and failed its smoke
+// test, and `error` when it refused a release before it ran.
+const FAILED = ['failure', 'error'];
+const BUG = 'create-bug';
+const DEPLOY_FLAG = 'flag-failed-deployment';
+
+// A failed deployment. On Production, a failure makes a Bug Critical, as the contract rule "Smoke test sau khi lên
+// Production fail" says, once per deployment; an error makes none, since that release never ran. On Development and
+// Staging, either flags the items the deployed commit names, as the rule "Deploy lên môi trường QA thất bại" says,
+// once per deployment and item. `notes` say what was done before.
+async function deploymentFailed(payload, { jira, github, space }) {
+  const { deployment, deployment_status: status } = payload;
+  const what = { id: deployment.id, sha: deployment.sha, environment: status.environment ?? deployment.environment, state: status.state, description: status.description ?? '' };
+  const result = { keys: [], actions: [], waiting: [], kept: [], notes: [], failures: [] };
+  if (what.environment === 'production') {
+    if (what.state !== 'failure') return result;
+    const label = `ao-deployment-${what.id}`;
+    const [made] = await jira.searchAll(`project = "${space}" AND labels = "${label}"`, ['status']);
+    if (made) {
+      result.notes.push(`deployment ${what.id}: Bug ${made.key} was made for it already`);
+      return result;
+    }
+    const version = (await github.getAll('/tags')).find(({ commit }) => commit.sha === what.sha)?.name ?? null;
+    result.actions.push({ key: `deployment ${what.id}`, effect: BUG, deployment: what, version, label });
+    return result;
+  }
+  const { commit } = await github.get(`/commits/${what.sha}`);
+  result.keys = [...new Set(extractKeys(commit.message.split('\n', 1)[0]))].filter((key) => key.startsWith(`${space}-`));
+  const marker = `jira-sync: deployment ${what.id} `;
+  for (const key of result.keys) {
+    try {
+      const comments = await jira.getAll(`/rest/api/3/issue/${encodeURIComponent(key)}/comment`, {}, 'comments');
+      if (comments.some(({ body }) => adfText(body).startsWith(marker))) result.notes.push(`${key}: deployment ${what.id} flagged it already`);
+      else result.actions.push({ key, effect: DEPLOY_FLAG, deployment: what });
+    } catch (error) {
+      result.failures.push({ key, error });
+    }
+  }
+  return result;
+}
+
+// The Bug Critical of a failed release on Production. The issue type is found by its English name, since the CI
+// account reads names in its own language (T1 of the plan); Affects versions is set when the release is a version on
+// Jira. Returns a note naming the Bug.
+async function createProductionBug({ deployment, version, label }, { jira, mapping, contract, space }) {
+  const typeName = contract.work_types.find(({ id }) => id === 'bug').jira_issue_type;
+  const types = await jira.getAll(`/rest/api/3/issue/createmeta/${encodeURIComponent(space)}/issuetypes`, {}, 'issueTypes');
+  const type = types.find((t) => (t.untranslatedName ?? t.name) === typeName);
+  if (!type) throw new Error(`${space} has no issue type ${typeName}`);
+  const fields = await jira.get('/rest/api/3/field');
+  const fieldId = (id) => {
+    const name = mapping.fields[id].jira_field;
+    const found = fields.find((field) => field.name === name);
+    if (!found) throw new Error(`Jira has no field ${name}`);
+    return found.id;
+  };
+  const valueName = (field, value) => contract.work_item_fields.find(({ id }) => id === field).values.find(({ id }) => id === value).name;
+  const versions = version ? await jira.get(`/rest/api/3/project/${encodeURIComponent(space)}/versions`) : [];
+  const known = versions.some(({ name }) => name === version);
+  const short = deployment.sha.slice(0, 7);
+  const lines = [
+    `jira-sync: deployment ${deployment.id} of ${short} to production failed: ${deployment.description}.`,
+    'The deployer kept the release that ran before. The contract rule "Smoke test sau khi lên Production fail" asks for this Bug Critical.',
+    ...(version ? [] : [`No tag names ${short}, so Affects versions is empty.`]),
+    ...(version && !known ? [`${version} is no version of ${space} on Jira, so Affects versions is empty.`] : []),
+  ];
+  const { key } = await jira.request('POST', '/rest/api/3/issue', {}, {
+    fields: {
+      project: { key: space },
+      issuetype: { id: type.id },
+      summary: `Smoke test failed on Production at ${version ?? short}`,
+      description: { type: 'doc', version: 1, content: lines.map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] })) },
+      labels: [label],
+      [fieldId('found-in')]: { value: valueName('found-in', 'production') },
+      [fieldId('severity')]: { value: valueName('severity', 'critical') },
+      ...(known ? { versions: [{ name: version }] } : {}),
+    },
+  });
+  return `made ${key}`;
+}
+
 // Reads what clearsMergeGateFlag needs: the item's labels, comments and changelog.
 async function flagClearing(key, number, { jira, mapping }) {
   const path = `/rest/api/3/issue/${encodeURIComponent(key)}`;
@@ -87,7 +170,17 @@ async function flagClearing(key, number, { jira, mapping }) {
 }
 
 // Makes one change with a client made for writing. Returns a note on what it did besides, or nothing.
-export async function applyAction(action, { jira, mapping, contract }) {
+export async function applyAction(action, { jira, mapping, contract, space }) {
+  if (action.effect === BUG) return createProductionBug(action, { jira, mapping, contract, space });
+  if (action.effect === DEPLOY_FLAG) {
+    const { id, sha, environment, state, description } = action.deployment;
+    await raiseFlag(action.key, { jira, mapping });
+    await jira.comment(
+      action.key,
+      `jira-sync: deployment ${id} of ${sha.slice(0, 7)} to ${environment} ${state === 'failure' ? 'failed' : 'was refused'}: ${description}. ${action.key} is flagged with the label ${mapping.needs_you_label} and waits for you.`,
+    );
+    return undefined;
+  }
   if (action.transition) {
     await jira.transition(action.key, action.name);
     return action.transition === REFINE && contract ? tickPlanLine(action.key, { jira, contract }) : undefined;
@@ -144,7 +237,9 @@ async function flaggedField(jira, mapping) {
   return flagged.id;
 }
 
-export function describe({ key, transition, name, from, to, effect, reworkCount, pr, merged }) {
+export function describe({ key, transition, name, from, to, effect, reworkCount, pr, merged, deployment, version }) {
+  if (effect === BUG) return `Bug Critical for deployment ${deployment.id} (${version ?? deployment.sha.slice(0, 7)})`;
+  if (effect === DEPLOY_FLAG) return `${key}: ${effect} (deployment ${deployment.id} to ${deployment.environment})`;
   if (transition) return `${key}: ${name} (${from} → ${to})`;
   if (effect === CLEAR) return `${key}: ${effect} (PR #${pr} ${merged ? 'merged' : 'closed'})`;
   return `${key}: ${effect} (rework ${reworkCount})`;
@@ -153,10 +248,11 @@ export function describe({ key, transition, name, from, to, effect, reworkCount,
 // Reconciles the event, prints what it finds and, unless dryRun, makes each change, then prints what the items still
 // wait for. A failure does not stop the others; all of them are returned, so the caller can exit non-zero.
 export async function runSync({ dryRun = false, log = console.log, ...context }) {
-  const { keys, actions, waiting, kept, failures } = await syncEvent(context);
+  const { keys, actions, waiting, kept, notes = [], failures } = await syncEvent(context);
   log(`${context.event}: ${keys.length > 0 ? keys.join(', ') : `no work item of ${context.space}`}`);
   for (const { key, error } of failures) log(`Failed ${key}: ${error.message}`);
   for (const { key, reason } of kept) log(`Kept ${key} flagged: ${reason}`);
+  for (const note of notes) log(`Kept ${note}`);
   for (const action of actions) {
     if (dryRun) {
       log(`Would make ${describe(action)}`);

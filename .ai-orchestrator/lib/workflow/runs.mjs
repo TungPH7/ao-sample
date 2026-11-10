@@ -46,6 +46,16 @@ export function readRun(lines, previous) {
   };
 }
 
+// A run is on record from its start (lib/workflow/runner.mjs). One killed with its shell never got its session, which
+// its log holds: readLog(name) gives the lines of a log of the run's folder. It returns the state it was given when
+// there is no such run, or the run died before its first line.
+export function withLoggedSession(state, readLog) {
+  const last = state?.runs.at(-1);
+  if (!last || last.session || !last.log) return state;
+  const { session } = readRun(readLog(last.log));
+  return session ? { ...state, runs: [...state.runs.slice(0, -1), { ...last, session }] } : state;
+}
+
 function outcomeOf(result) {
   if (!result) return 'unfinished';
   if (result.subtype === 'error_max_turns') return 'max-turns';
@@ -54,10 +64,16 @@ function outcomeOf(result) {
   return 'done';
 }
 
+// The first line of an Open Questions section that says there is none: alone, or before punctuation such as ":", ",",
+// a dash or "(", and asking nothing. A question that begins with the same words ("Không có Figma." of ux on SMP-2, or
+// "Không có, hay chỉ một nút xóa?") is still a question (review of ao-sample PR #5).
+const NONE = /^(?:Không có|Không còn|None)(?: câu hỏi)?(?: mở)?(?: nào)?(?: cả)?(?: open)?(?: questions?)?\s*(?:$|[.!:;,(–—-])/i;
+const saysNone = (line) => NONE.test(line) && !line.includes('?');
+
 // The questions still open in the Open Questions section of a Markdown artifact: the first line of each item of its
 // top-level list, or its text when it has no list. None when the section is missing or empty, holds only the template's
-// comment, or says there is none ("Không có", "Không còn câu hỏi mở", "None"), even with notes on the old answers
-// after that.
+// comment, or its first line says there is none ("Không có", "Không còn câu hỏi mở", "None"), even with notes on the
+// old answers after that.
 export function openQuestions(markdown) {
   const lines = markdown.replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
   const start = lines.findIndex((line) => /^#{2,6}\s+Open Questions\s*$/i.test(line));
@@ -66,9 +82,8 @@ export function openQuestions(markdown) {
   const end = lines.findIndex((line, i) => i > start && new RegExp(`^#{1,${level}}\\s`).test(line));
   const section = lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() !== '');
   const plain = (text) => text.replace(/\*\*|__/g, '').trim();
-  // Not \b: JavaScript sees the ó of "có" as a non-word character.
-  if (section.some((line) => /^(?:[-*]\s+|\d+[.)]\s+)?(?:Không có|Không còn câu hỏi mở|None)(?=$|[\s.,:;!])/i.test(plain(line)))) return [];
   const unlisted = (line) => plain(line.replace(/^(?:[-*]|\d+[.)])\s+/, ''));
+  if (section.length > 0 && saysNone(unlisted(section[0]))) return [];
   // Questions named Q1, Q2… at the start of a line, in a list item or a bold paragraph: the bullets and tables that
   // explain them are not questions (sa on DEMO-20, dev-workflow T17).
   const named = section.filter((line) => /^\S/.test(line) && /^Q\d+\b/.test(unlisted(line))).map(unlisted);

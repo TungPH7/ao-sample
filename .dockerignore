@@ -1,0 +1,25 @@
+# The images of apps/web/Dockerfile and apps/api/Dockerfile need package.json, package-lock.json and the source of
+# apps/. The deployer builds from the root of the repo.
+docs/
+*.md
+**/*.md
+.git/
+.github/
+.githooks/
+.claude/
+.ai/
+.ai-orchestrator/
+.jira/
+.mcp.json
+.env*
+**/.env*
+**/node_modules/
+**/.next/
+**/dist/
+**/coverage/
+**/*.tsbuildinfo
+e2e/
+test-results/
+playwright-report/
+playwright.config.ts
+scripts/

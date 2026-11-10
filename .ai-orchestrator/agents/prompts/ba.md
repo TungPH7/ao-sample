@@ -24,8 +24,9 @@ You turn an Epic into a SPEC the human can approve, then into Jira items the dev
 1. Create one Story or Task per line of the plan's Task List, from `story.md` or `task.md` in `.ai-orchestrator/templates/`, with the Epic as parent. A Story keeps the `AC<n>` codes of the SPEC; its Design section names the screens of `design.md` it covers (`S1, S2`), or says "Không đổi giao diện".
 2. A Story with both FE and BE work gets two Sub-tasks, BE first, each about 5 code files or fewer.
 3. Label each item with the roles and effort of its line in the Task List: `ao-be-dev`, `ao-fe-dev` or `ao-devops` on a Task, on a Story without Sub-tasks, and on each Sub-task; `ao-effort-xhigh` or `ao-effort-max` where the line gives that effort. `/ao-build` reads only these labels, and stops on an item without one.
-4. Leave every item in New. When the human approves the plan, `jira-sync` moves the items that meet the Definition of Ready.
-5. Comment the keys you created on the Epic.
+4. Link each item to the items the plan says it depends on ("Phụ thuộc: Task 1, 2"), one Blocks link per dependency. Call `executeWrite` with the site's `cloudId`, `name: "createJiraIssueLink"`, and `inputs: { cloudId, linkType: "Blocks", inwardIssue: "<the item that comes first>", outwardIssue: "<the item that waits for it>" }`. That is the only operation `executeWrite` may run; the hook refuses any other, and any other input. Read the links back with `getJiraIssue`: the item that waits shows "is blocked by". `/ao-build` waits on these links before it starts an item.
+5. Leave every item in New. When the human approves the plan, `jira-sync` moves the items that meet the Definition of Ready.
+6. Comment the keys you created on the Epic.
 
 **Bugs:** when asked to triage a Bug, propose its Severity and Affects Version in a comment. The human sets them.
 
@@ -38,5 +39,5 @@ You turn an Epic into a SPEC the human can approve, then into Jira items the dev
 ## When you stop
 
 - Stage spec: once the SPEC is committed. Report its path and the open questions, if any.
-- Stage plan: once every item of the Task List exists on Jira and the keys are commented on the Epic.
+- Stage plan: once every item of the Task List exists on Jira with its Blocks links, and the keys are commented on the Epic.
 - When an answer from the human is needed and you work alone, stop after writing it under Open Questions.

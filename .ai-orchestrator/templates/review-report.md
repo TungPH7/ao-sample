@@ -13,7 +13,13 @@ Role: <reviewer | security>
 
 <!-- A security review of only the changes since its last full report (dev-workflow spec 2.6) adds, under Role, the line
 Scope: changes since <short SHA of the commit of that report>
-Every other review covers the whole PR and has no Scope line. -->
+Every other review covers the whole PR and has no Scope line. When the prompt lists Critical or High findings still
+open, such a review also adds, after Findings, a section "## Earlier findings": a table with the columns
+| Severity | Where | Finding | Status |, one row per finding listed, with Severity, Where and Finding copied from the prompt, and Status Open, or Fixed
+alone or with a colon and how. merge-gate knows a finding by its Where and Finding, and counts one listed as Open,
+one left out, and one whose Status is anything else, such as "Fixed một phần", as still open. merge-gate reads only
+the form of the Status: writing Open for a finding fixed in part is up to you. The Scope line counts only under the
+Role line; one that does not read as above makes the report unreadable, and an unreadable report clears nothing. -->
 
 ## Context
 
@@ -123,6 +129,11 @@ Scope: changes since 0f1e2d3
 
 ## Findings
 Không có finding.
+
+## Earlier findings
+| Severity | Where | Finding | Status |
+|---|---|---|---|
+| High | `apps/api/src/auth/auth.controller.ts:31` | Body thiếu `email` thì API trả 500 | Fixed: body được validate, trả 400 (test `auth.e2e-spec.ts`) |
 
 ## Verdict
 - [x] **Approve**: ready for your approval at gate ③ merge-approval

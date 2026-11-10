@@ -8,13 +8,14 @@
   "properties": {
     "jira_tools": {
       "type": "object",
-      "required": ["read", "create", "edit", "comment", "transition"],
+      "required": ["read", "create", "edit", "comment", "link", "transition"],
       "additionalProperties": false,
       "properties": {
         "read": { "$ref": "#/$defs/toolNames" },
         "create": { "$ref": "#/$defs/toolNames" },
         "edit": { "$ref": "#/$defs/toolNames" },
         "comment": { "$ref": "#/$defs/toolNames" },
+        "link": { "$ref": "#/$defs/toolNames" },
         "transition": { "$ref": "#/$defs/toolNames" }
       }
     },
@@ -78,7 +79,7 @@
           "type": "array",
           "uniqueItems": true,
           "contains": { "const": "read" },
-          "items": { "enum": ["read", "create", "edit", "comment", "transition"] }
+          "items": { "enum": ["read", "create", "edit", "comment", "link", "transition"] }
         },
         "git": { "enum": ["read", "write"] },
         "writes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/text" } },

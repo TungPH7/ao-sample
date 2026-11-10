@@ -212,6 +212,8 @@ export async function readChecks(github, sha) {
       runs.every((r) => r.status === 'completed' && PASSED.includes(r.conclusion)) &&
       [null, 'success'].includes(statusState),
     failed: runs.some((r) => FAILED.includes(r.conclusion)) || ['failure', 'error'].includes(statusState),
+    // Whether any check run or status is on the commit yet: CI that never started looks like CI still running.
+    started: runs.length + status.total_count > 0,
   };
 }
 
@@ -232,7 +234,7 @@ async function qaDeployed(github, pr, contract, mapping) {
 }
 
 // The first QA environment of the route whose base branch matches; release/* stands for any release branch.
-function qaEnvironment(contract, base) {
+export function qaEnvironment(contract, base) {
   const routes = [contract.new_work_route, ...contract.bug_routing.flatMap(({ routes: list }) => list)];
   const route = routes.find(({ base_branch: branch }) => branch === base || (branch === 'release/*' && base.startsWith('release/')));
   if (!route) throw new Error(`No QA environment for base branch '${base}'`);

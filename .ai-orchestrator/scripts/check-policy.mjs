@@ -8,6 +8,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
+import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { runNpm } from '../lib/quality/npm.mjs';
 import { checkDesignFile } from '../lib/quality/design-files.mjs';
@@ -62,7 +63,7 @@ try {
     const changes = git('diff', '--name-status', '--no-renames', base, 'HEAD')
       .split('\n')
       .filter(Boolean)
-      .map((line) => ({ status: line[0], path: line.split('\t').at(-1) }));
+      .map((line) => ({ status: line[0], path: unquotePath(line.split('\t').at(-1)) }));
     const designs = designFilesToCheck(changes, (path) => existsSync(join(root, path)));
     sections.push(['Design', designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`))]);
   }

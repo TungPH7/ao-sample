@@ -1,6 +1,6 @@
 // The globs of quality/gates.yaml: `**` matches across folders, `*` within one name, `{a,b}` either text.
 // Paths use forward slashes.
-export function globToRegExp(glob) {
+export function globToRegExp(glob, flags = '') {
   let pattern = '';
   for (let i = 0; i < glob.length; i++) {
     const char = glob[i];
@@ -14,7 +14,7 @@ export function globToRegExp(glob) {
     else if (char === ',' && glob.lastIndexOf('{', i) > glob.lastIndexOf('}', i)) pattern += '|';
     else pattern += char.replace(/[.+?^$()|[\]\\]/, '\\$&');
   }
-  return new RegExp(`^${pattern}$`);
+  return new RegExp(`^${pattern}$`, flags);
 }
 
-export const matchesGlob = (glob, path) => globToRegExp(glob).test(path);
+export const matchesGlob = (glob, path, { ignoreCase = false } = {}) => globToRegExp(glob, ignoreCase ? 'i' : '').test(path);

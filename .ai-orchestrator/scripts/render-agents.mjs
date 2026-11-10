@@ -1,9 +1,10 @@
 // Generates the agents and the shared rules file (agent-roster spec 2.1, 2.6) from agents/, the contract,
-// quality/gates.yaml and tracker/jira.yaml. --check writes nothing and fails when a generated file is stale.
+// quality/gates.yaml and tracker/jira.yaml. --check writes nothing and fails when a generated file is stale. --list prints
+// the files it writes, one path per line, and writes nothing: ao-step refuses a kit copy with any other file among them.
 // In the kit repo it writes kit/.claude/. With --project <dir> it reads the kit copy in <dir>/.ai-orchestrator/, adds the
 // stack skills of its roster.local.yaml, takes the space key from AO_JIRA_SPACE in <dir>/.claude/settings.json, and
 // writes <dir>/.claude/.
-// Usage: node scripts/render-agents.mjs [--check] [--project <dir>]
+// Usage: node scripts/render-agents.mjs [--check | --list] [--project <dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +16,7 @@ import { readContract } from '../lib/contract.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 
-const { values } = parseArgs({ options: { check: { type: 'boolean' }, project: { type: 'string' } } });
+const { values } = parseArgs({ options: { check: { type: 'boolean' }, list: { type: 'boolean' }, project: { type: 'string' } } });
 const project = values.project ? resolve(values.project) : null;
 const kitDir = project ? join(project, '.ai-orchestrator') : fileURLToPath(new URL('..', import.meta.url));
 const outDir = project ? join(project, '.claude') : join(kitDir, 'kit', '.claude');
@@ -53,7 +54,9 @@ const stale = [...files].filter(([path, text]) => {
   return !existsSync(file) || readFileSync(file, 'utf8') !== text;
 });
 
-if (values.check) {
+if (values.list) {
+  for (const [path] of files) console.log(`${where}${path}`);
+} else if (values.check) {
   if (stale.length === 0) console.log(`${files.size} files up to date in ${where}`);
   else {
     for (const [path] of stale) console.error(`stale: ${where}${path}`);

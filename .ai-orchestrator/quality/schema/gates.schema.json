@@ -3,7 +3,7 @@
   "title": "quality/gates.yaml",
   "description": "Quality gates of a project (quality-gates spec sections 2.2 to 2.8 and 6).",
   "type": "object",
-  "required": ["checks", "coverage", "dependencies", "suppressions", "protected_branches", "merge_method", "protected_paths", "docs_pull_requests", "github_apps"],
+  "required": ["checks", "coverage", "dependencies", "suppressions", "protected_branches", "merge_method", "release_pull_requests", "protected_paths", "security_review", "kit_copy", "docs_pull_requests", "github_apps"],
   "additionalProperties": false,
   "properties": {
     "checks": {
@@ -60,6 +60,17 @@
       "propertyNames": { "$ref": "#/$defs/id" },
       "additionalProperties": { "enum": ["squash", "merge"] }
     },
+    "release_pull_requests": {
+      "type": "object",
+      "required": ["merge_method", "tag", "back_merge_bases", "back_merge_after_release"],
+      "additionalProperties": false,
+      "properties": {
+        "merge_method": { "enum": ["merge"] },
+        "tag": { "type": "string", "pattern": "^[A-Za-z0-9._-]*<VERSION>[A-Za-z0-9._-]*$" },
+        "back_merge_bases": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["develop", "release/*"] } },
+        "back_merge_after_release": { "enum": ["develop", "release/*"] }
+      }
+    },
     "protected_paths": {
       "type": "array",
       "minItems": 1,
@@ -71,6 +82,27 @@
           "path": { "$ref": "#/$defs/text" },
           "editors": { "$ref": "#/$defs/roles" }
         }
+      }
+    },
+    "security_review": {
+      "type": "object",
+      "required": ["roster_effort_paths", "lower_effort"],
+      "additionalProperties": false,
+      "properties": {
+        "roster_effort_paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "lower_effort": { "enum": ["low", "medium", "high", "xhigh", "max"] }
+      }
+    },
+    "kit_copy": {
+      "type": "object",
+      "required": ["same", "same_when_changed", "rendered", "newest_path", "newest_branch"],
+      "additionalProperties": false,
+      "properties": {
+        "same": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "same_when_changed": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "rendered": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "newest_path": { "type": "string", "minLength": 1 },
+        "newest_branch": { "type": "string", "minLength": 1 }
       }
     },
     "docs_pull_requests": {
