@@ -56,6 +56,8 @@ Danh sách ghi chú xếp mới nhất lên đầu (SPEC của SMP-2), nên mỗ
 | Dòng nhắc kèm nút Ghim bị khóa | Bỏ ghim một ghi chú để ghim ghi chú này |
 | Ghim không thành | Không ghim được ghi chú. Vui lòng thử lại. |
 | Bỏ ghim không thành | Không bỏ ghim được ghi chú. Vui lòng thử lại. |
+| Thông báo cho trình đọc màn hình khi ghim thành công (S1.20) | Đã ghim ghi chú. |
+| Thông báo cho trình đọc màn hình khi bỏ ghim thành công (S1.20) | Đã bỏ ghim ghi chú. |
 
 ### User Stories
 
