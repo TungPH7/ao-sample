@@ -601,7 +601,7 @@ describe('a pin or unpin that fails (AC5, AC7)', () => {
     await settle(api.puts()[0], json({}, 500));
 
     press('B');
-    const three = [pinnedNote('b', 'B'), pinnedNote('p1', 'P1'), pinnedNote('p2', 'P2'), note('a', 'A')];
+    const three = [pinnedNote('p1', 'P1'), pinnedNote('p2', 'P2'), pinnedNote('b', 'B'), note('a', 'A')];
     await settle(api.puts()[1], json({ data: three }));
 
     expect(buttonOf('A').getAttribute('aria-disabled')).toBe('true');
@@ -613,7 +613,8 @@ describe('a pin or unpin that fails (AC5, AC7)', () => {
 });
 
 describe('the limit of 3 pinned notes (AC8, AC9)', () => {
-  const THREE = [pinnedNote('p3', 'P3'), pinnedNote('p2', 'P2'), pinnedNote('p1', 'P1'), note('b', 'B')];
+  // Pinned in the order P1, P2, P3: the earliest pin first (Rules 1 of the SPEC of SMP-23).
+  const THREE = [pinnedNote('p1', 'P1'), pinnedNote('p2', 'P2'), pinnedNote('p3', 'P3'), note('b', 'B')];
 
   test('locks the Ghim button of every note that is not pinned, and sends nothing on a press', async () => {
     await openWith(THREE);
@@ -630,7 +631,7 @@ describe('the limit of 3 pinned notes (AC8, AC9)', () => {
     fireEvent.click(buttonOf('B'));
 
     press('P2');
-    const two = [pinnedNote('p3', 'P3'), pinnedNote('p1', 'P1'), note('b', 'B'), note('p2', 'P2')];
+    const two = [pinnedNote('p1', 'P1'), pinnedNote('p3', 'P3'), note('b', 'B'), note('p2', 'P2')];
     await settle(api.deletes()[0], json({ data: two }));
 
     expect(buttonOf('B').hasAttribute('aria-disabled')).toBe(false);
@@ -643,7 +644,7 @@ describe('the limit of 3 pinned notes (AC8, AC9)', () => {
     save('Mới');
     await settle(api.posts()[0], json(note('n', 'Mới'), 201));
 
-    expect(listedTitles()).toEqual(['P3', 'P2', 'P1', 'Mới', 'B']);
+    expect(listedTitles()).toEqual(['P1', 'P2', 'P3', 'Mới', 'B']);
     expect(buttonOf('Mới').getAttribute('aria-disabled')).toBe('true');
     expect(api.gets()).toHaveLength(1);
   });
@@ -667,9 +668,9 @@ describe('saving a note while some are pinned (AC3)', () => {
     save('E');
     await settle(api.posts()[0], json(note('e', 'E'), 201));
     expect(listedTitles()).toEqual(['P', 'E', 'A']);
-    await settle(api.puts()[0], json({ data: [pinnedNote('a', 'A'), pinnedNote('p', 'P')] }));
+    await settle(api.puts()[0], json({ data: [pinnedNote('p', 'P'), pinnedNote('a', 'A')] }));
 
-    expect(listedTitles()).toEqual(['A', 'P', 'E']);
+    expect(listedTitles()).toEqual(['P', 'A', 'E']);
   });
 
   test('shows the new note once when a later answer has it', async () => {
@@ -692,10 +693,10 @@ describe('answers that arrive out of order (decision 7)', () => {
 
     press('A');
     press('B');
-    await settle(api.puts()[1], json({ data: [pinnedNote('b', 'B'), pinnedNote('a', 'A')] }));
+    await settle(api.puts()[1], json({ data: [pinnedNote('a', 'A'), pinnedNote('b', 'B')] }));
     await settle(api.puts()[0], json({ data: [pinnedNote('a', 'A'), note('b', 'B')] }));
 
-    expect(listedTitles()).toEqual(['B', 'A']);
+    expect(listedTitles()).toEqual(['A', 'B']);
     expect(isMarkedPinned('B')).toBe(true);
     expect(buttonOf('A').hasAttribute('aria-busy')).toBe(false);
     expect(await announced()).toBe('Đã ghim ghi chú.');
@@ -704,18 +705,19 @@ describe('answers that arrive out of order (decision 7)', () => {
 
 describe('a pin the API refuses because 3 notes are pinned already (AC10)', () => {
   test('sends exactly one GET, shows its list, locks the button with its hint open, and reads the hint', async () => {
-    await openWith([pinnedNote('p2', 'P2'), pinnedNote('p1', 'P1'), note('b', 'B')]);
+    await openWith([pinnedNote('p1', 'P1'), pinnedNote('p2', 'P2'), note('b', 'B')]);
 
     press('B');
     await settle(api.puts()[0], json(LIMIT_REACHED, 409));
     expect(api.gets()).toHaveLength(2);
     // design.md S1.11: no skeleton; the old list stays and the button stays pending until the new list comes.
-    expect(listedTitles()).toEqual(['P2', 'P1', 'B']);
+    expect(listedTitles()).toEqual(['P1', 'P2', 'B']);
     expect(buttonOf('B').getAttribute('aria-busy')).toBe('true');
-    const three = [pinnedNote('x', 'X'), pinnedNote('p2', 'P2'), pinnedNote('p1', 'P1'), note('b', 'B')];
+    // X, pinned meanwhile from another browser, at the bottom of the pinned notes.
+    const three = [pinnedNote('p1', 'P1'), pinnedNote('p2', 'P2'), pinnedNote('x', 'X'), note('b', 'B')];
     await settle(api.gets()[1], json({ data: three }));
 
-    expect(listedTitles()).toEqual(['X', 'P2', 'P1', 'B']);
+    expect(listedTitles()).toEqual(['P1', 'P2', 'X', 'B']);
     expect(isMarkedPinned('B')).toBe(false);
     expect(buttonOf('B').getAttribute('aria-disabled')).toBe('true');
     expect(buttonOf('B').hasAttribute('aria-busy')).toBe(false);
