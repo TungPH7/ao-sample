@@ -11,6 +11,7 @@ import {
   pinButton,
   pinNote,
   pinnedMark,
+  pinnedTitles,
   storedNotes,
   uniqueTitle,
   unpinNote,
@@ -46,27 +47,48 @@ async function unpinAll(request: Parameters<typeof unpinNote>[0], notes: StoredN
   for (const note of notes) await unpinNote(request, note.id);
 }
 
-test('AC1 pins a note to the top of the list without reloading the page', async ({ page, request }) => {
-  const a = await createNote(request, { title: uniqueTitle('AC1') });
+// The notes pinned before the test, if any, stay above; when there are none, the first pin goes to the top of the list.
+test('AC1 pins a note at the bottom of the pinned notes, below the ones pinned before, which keep their places, without reloading the page', async ({
+  page,
+  request,
+}) => {
+  const a = await createNote(request, { title: uniqueTitle('AC1 A') });
+  const b = await createNote(request, { title: uniqueTitle('AC1 B') });
   try {
     await page.goto('/notes');
     await markDocument(page);
-    const item = itemWithTitle(page, a.title);
-    await expect(pinnedMark(item)).toHaveCount(0);
+    const itemA = itemWithTitle(page, a.title);
+    const itemB = itemWithTitle(page, b.title);
+    await expect(itemB).toBeVisible();
+    await expect(pinnedMark(itemA)).toHaveCount(0);
+    const before = await pinnedTitles(page);
+    const items = listSection(page).getByRole('listitem');
 
-    await pinButton(item).click();
+    await pinButton(itemA).click();
 
-    await expect(pinnedMark(item)).toBeVisible();
-    await expect(item.getByRole('button', { name: `Bỏ ghim ${a.title}` })).toBeFocused();
-    const first = listSection(page).getByRole('listitem').first();
-    await expect(first.getByRole('heading', { level: 3 })).toHaveText(a.title);
+    await expect(pinnedMark(itemA)).toBeVisible();
+    await expect(itemA.getByRole('button', { name: `Bỏ ghim ${a.title}` })).toBeFocused();
+    await expect.poll(() => pinnedTitles(page)).toEqual([...before, a.title]);
+    await expect(items.nth(before.length).getByRole('heading', { level: 3 })).toHaveText(a.title);
+    await expect(pinnedMark(items.nth(before.length + 1))).toHaveCount(0);
+
+    // A second pin goes right below A, and A keeps its place.
+    await pinButton(itemB).click();
+
+    await expect(pinnedMark(itemB)).toBeVisible();
+    await expect(itemB.getByRole('button', { name: `Bỏ ghim ${b.title}` })).toBeFocused();
+    await expect.poll(() => pinnedTitles(page)).toEqual([...before, a.title, b.title]);
+    await expect(items.nth(before.length).getByRole('heading', { level: 3 })).toHaveText(a.title);
+    await expect(items.nth(before.length + 1).getByRole('heading', { level: 3 })).toHaveText(b.title);
+    await expect(pinnedMark(items.nth(before.length + 2))).toHaveCount(0);
     expect(await isSameDocument(page)).toBe(true);
   } finally {
+    await unpinNote(request, b.id);
     await unpinNote(request, a.id);
   }
 });
 
-test('AC2 shows B, A, D, C after a reload and in another browser, with the pinned mark on B and A only', async ({
+test('AC2 shows A, B, D, C after a reload and in another browser, with the pinned mark on A and B only', async ({
   page,
   browser,
   request,
@@ -86,16 +108,16 @@ test('AC2 shows B, A, D, C after a reload and in another browser, with the pinne
     for (const target of [page, await other.newPage()]) {
       await target.goto('/notes');
       await expect(itemWithTitle(target, d.title)).toBeVisible();
-      expect(await orderOf(target, [a.title, b.title, c.title, d.title])).toEqual([b.title, a.title, d.title, c.title]);
-      await expect(pinnedMark(itemWithTitle(target, b.title))).toBeVisible();
+      expect(await orderOf(target, [a.title, b.title, c.title, d.title])).toEqual([a.title, b.title, d.title, c.title]);
       await expect(pinnedMark(itemWithTitle(target, a.title))).toBeVisible();
+      await expect(pinnedMark(itemWithTitle(target, b.title))).toBeVisible();
       await expect(pinnedMark(itemWithTitle(target, d.title))).toHaveCount(0);
       await expect(pinnedMark(itemWithTitle(target, c.title))).toHaveCount(0);
     }
 
     await page.reload();
     await expect(itemWithTitle(page, d.title)).toBeVisible();
-    expect(await orderOf(page, [a.title, b.title, c.title, d.title])).toEqual([b.title, a.title, d.title, c.title]);
+    expect(await orderOf(page, [a.title, b.title, c.title, d.title])).toEqual([a.title, b.title, d.title, c.title]);
   } finally {
     await other.close();
     await unpinAll(request, pinned);

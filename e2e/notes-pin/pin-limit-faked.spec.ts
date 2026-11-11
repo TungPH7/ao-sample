@@ -64,7 +64,8 @@ function threePinned(code: string) {
   const p3 = fakeNote(`${prefix} P3`, 3, 12);
   const b = fakeNote(`${prefix} B`, 4);
   const c = fakeNote(`${prefix} C`, 5);
-  return { p1, p2, p3, b, c, list: [p3, p2, p1, c, b] };
+  // The earliest pin first (Rules 1 of the SPEC), then the notes that are not pinned, newest first.
+  return { p1, p2, p3, b, c, list: [p1, p2, p3, c, b] };
 }
 
 test('AC8 locks Ghim on a note that is not pinned once 3 are pinned, with the hint as its description', async ({ page }) => {
@@ -72,7 +73,7 @@ test('AC8 locks Ghim on a note that is not pinned once 3 are pinned, with the hi
   await fakeLists(page, [list]);
   // The answer of the DELETE of P1 at the end: P1 back among the others, by creation time.
   const pins = await fakePins(page, (route) =>
-    route.fulfill({ json: { data: [p3, p2, c, b, { ...p1, pinnedAt: null }] } }),
+    route.fulfill({ json: { data: [p2, p3, c, b, { ...p1, pinnedAt: null }] } }),
   );
   await page.goto('/notes');
   const item = itemWithTitle(page, b.title);
@@ -119,7 +120,7 @@ test('AC9 opens Ghim again and drops the hint once one of the 3 notes is unpinne
   // The answer of the DELETE: 2 pinned notes, and P2 back among the others by creation time.
   await fakePins(page, (route) =>
     route.request().method() === 'DELETE'
-      ? route.fulfill({ json: { data: [p3, p1, c, b, { ...p2, pinnedAt: null }] } })
+      ? route.fulfill({ json: { data: [p1, p3, c, b, { ...p2, pinnedAt: null }] } })
       : route.fulfill({ status: 500 }),
   );
   await page.goto('/notes');
@@ -152,9 +153,10 @@ test('AC10 reloads the list once, shows the 3 pinned notes and locks Ghim with i
   let getsAfterPut = 0;
   await page.route('**/api/notes', (route) => {
     if (route.request().method() !== 'GET') return route.continue();
-    if (!refused) return route.fulfill({ json: { data: [p2, p1, b, x] } });
+    if (!refused) return route.fulfill({ json: { data: [p1, p2, b, x] } });
     getsAfterPut += 1;
-    return route.fulfill({ json: { data: [pinnedOf(x, 30), p2, p1, b] } });
+    // X, pinned last, at the bottom of the pinned notes.
+    return route.fulfill({ json: { data: [p1, p2, pinnedOf(x, 30), b] } });
   });
   const pins = await fakePins(page, (route) => {
     refused = true;
@@ -176,7 +178,10 @@ test('AC10 reloads the list once, shows the 3 pinned notes and locks Ghim with i
   await expect(item.getByText(PIN_ERROR)).toHaveCount(0);
   const items = listSection(page).getByRole('listitem');
   for (const n of [0, 1, 2]) await expect(pinnedMark(items.nth(n))).toBeVisible();
-  await expect(items.nth(0).getByRole('heading', { level: 3 })).toHaveText(x.title);
+  await expect(items.nth(0).getByRole('heading', { level: 3 })).toHaveText(p1.title);
+  await expect(items.nth(1).getByRole('heading', { level: 3 })).toHaveText(p2.title);
+  await expect(items.nth(2).getByRole('heading', { level: 3 })).toHaveText(x.title);
+  await expect(items.nth(3).getByRole('heading', { level: 3 })).toHaveText(b.title);
   expect(pins.requests).toEqual([`PUT /api/notes/${b.id}/pin`]);
   expect(getsAfterPut).toBe(1);
 });

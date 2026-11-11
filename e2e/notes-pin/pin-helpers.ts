@@ -76,6 +76,15 @@ export async function orderOf(page: Page, titles: string[]): Promise<string[]> {
   return all.filter((title) => titles.includes(title));
 }
 
+// The titles of every note with the pinned mark, top to bottom: the pinned group, as the page shows it.
+export async function pinnedTitles(page: Page): Promise<string[]> {
+  return listSection(page)
+    .getByRole('listitem')
+    .filter({ has: page.getByText(PINNED_MARK, { exact: true }) })
+    .getByRole('heading', { level: 3 })
+    .allTextContents();
+}
+
 // Gone if the page reloads.
 export async function markDocument(page: Page): Promise<void> {
   await page.evaluate(() => Object.assign(window, { __sameDocument: true }));
