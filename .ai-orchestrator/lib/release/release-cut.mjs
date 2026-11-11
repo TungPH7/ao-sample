@@ -25,8 +25,9 @@ export function nextMinor(version) {
   return `v${major}.${minor + 1}.0`;
 }
 
-// included, after: items as { key, fixVersions }. Returns { fixVersions: [{ key, names }], comments: [{ key, text }] }.
-export function releaseCutChanges({ version, nextVersion, sha, approvedAt, included, after }) {
+// included, after, cancelled: items as { key, fixVersions }; cancelled are the Cancelled items whose commits go out with
+// the release (cutPoint). Returns { fixVersions: [{ key, names }], comments: [{ key, text }] }.
+export function releaseCutChanges({ version, nextVersion, sha, approvedAt, included, after, cancelled = [] }) {
   const fixVersions = [];
   const comments = [];
   for (const { key } of included) {
@@ -36,6 +37,9 @@ export function releaseCutChanges({ version, nextVersion, sha, approvedAt, inclu
   for (const { key, fixVersions: names } of after.filter(({ fixVersions: names }) => names.includes(version))) {
     fixVersions.push({ key, names: [...new Set(names.map((name) => (name === version ? nextVersion : name)))] });
     comments.push({ key, text: `ao-step: ${key} is after the cut point of ${version}, so its Fix Version moved to ${nextVersion}.` });
+  }
+  for (const { key } of cancelled) {
+    comments.push({ key, text: `ao-step: ${key} is Cancelled, but its commits are on develop up to ${sha.slice(0, 8)}, so its code goes out with ${version}, without a Fix Version. You approved the list at gate ④ on ${approvedAt}.` });
   }
   return { fixVersions, comments };
 }

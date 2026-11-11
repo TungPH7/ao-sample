@@ -60,6 +60,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 | Thiết kế màn hình | `.ai-orchestrator/templates/design.md` | `ux` | Git: `docs/specs/<EPIC-KEY>/design.md`; Git: `docs/specs/<EPIC-KEY>/design/` (ảnh của màn hình kiểu Figma) |
 | Plan | `.ai-orchestrator/templates/plan.md` | `sa` | Git: `docs/specs/<EPIC-KEY>/plan.md` |
 | ADR | `.ai-orchestrator/templates/adr.md` | `sa` | Git: `docs/adr/NNNN-<slug>.md` |
+| Epic | `.ai-orchestrator/templates/epic.md` | `human` | Jira: Mô tả item |
 | Story | `.ai-orchestrator/templates/story.md` | `ba` | Jira: Mô tả item |
 | Task | `.ai-orchestrator/templates/task.md` | `ba` | Jira: Mô tả item |
 | Bug | `.ai-orchestrator/templates/bug.md` | whoever reports it | Jira: Mô tả item |

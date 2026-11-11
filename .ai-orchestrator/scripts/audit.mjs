@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { readContract } from '../lib/contract.mjs';
 import { projectSettings, setting } from '../lib/project-settings.mjs';
-import { runAudit } from '../lib/quality/audit.mjs';
+import { commitArgument, runAudit } from '../lib/quality/audit.mjs';
 import { gatePassage } from '../lib/quality/docs-pr.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { createGitHubClient, originRepo, readGitHubToken } from '../lib/tracker/github-client.mjs';
@@ -58,7 +58,7 @@ try {
     docs,
     mapping,
     space,
-    sha: values.sha,
+    sha: commitArgument(values.sha),
     branch: values.branch,
     gates,
     apps,

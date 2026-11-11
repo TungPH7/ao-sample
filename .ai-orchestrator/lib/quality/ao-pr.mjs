@@ -2,7 +2,8 @@
 // comment go through the ao-dev App, review through the ao-review App. What it can check is checked before anything is
 // sent. `clientFor(kind)` gives a writing GitHub client for that App; tests pass a fake one.
 import { parseArgs } from 'node:util';
-import { checkBranch } from '../tracker/conventions.mjs';
+import { checkBranch, parseBranch, WORK_BRANCH_KINDS as WORK_KINDS } from '../tracker/conventions.mjs';
+import { epicOfDocsBranch } from './gates.mjs';
 import { checkDescription, checkPullRequest, checkTitle, readReviewReport } from './pull-request.mjs';
 
 const USAGE = `usage:
@@ -27,8 +28,11 @@ export async function runAoPr(argv, { gates, clientFor, readFile, currentBranch 
     const branch = checkBranch(head, { base: values.base });
     const problems = [...(branch.ok ? [] : [`branch: ${branch.reason}`]), ...checkPullRequest({ title: values.title, body }).problems];
     if (problems.length > 0) throw refuse(problems);
-    const pr = await (await clientFor('dev')).request('POST', '/pulls', {}, { title: values.title, head, base: values.base, body });
-    return `opened #${pr.number} ${pr.html_url}`;
+    // The PR of a work item opens as a draft, for the human to preview before review; /ao-review marks it ready (human-
+    // loop spec 4.1). The docs PR of an Epic does not: merge-gate merges it after gate ②, and never a draft.
+    const draft = WORK_KINDS.includes(parseBranch(head)?.kind) && !epicOfDocsBranch(gates, head);
+    const pr = await (await clientFor('dev')).request('POST', '/pulls', {}, { title: values.title, head, base: values.base, body, ...(draft && { draft: true }) });
+    return `opened ${draft ? 'draft ' : ''}#${pr.number} ${pr.html_url}`;
   }
   if (command === 'edit') {
     if (values.title === undefined && body === undefined) throw usage();

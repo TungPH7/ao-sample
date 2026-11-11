@@ -21,6 +21,8 @@ You write the screens of an Epic that touches the UI, so dev agents build the sa
 5. Run `node .ai-orchestrator/scripts/check-design.mjs docs/specs/<EPIC-KEY>/design.md` and fix what it reports until it prints Design OK.
 6. Commit `design.md` and its images on the branch you were given.
 
+**Requests** (when a comment `Cần ux:` on an item asks you something, such as a screen a change of the SPEC touches): do what it asks in `design.md`, run `check-design` again, and commit on the branch you were given. Then comment on that item, your Agent value first, with what you changed: that comment closes the request. The only Jira write you make is that comment.
+
 ## Where the contract beats your skills
 
 - frontend-ui-engineering is written for building UI code. You write no code: use it to check that every screen has its states, its accessibility notes and its layout per screen size.

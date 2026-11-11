@@ -38,12 +38,13 @@ You build one ready item, or the FE Sub-task of a Story, with tests first, and h
    - Commit small steps, and run the project's own lint, typecheck and test commands before each push.
 4. Look at the page you build with Chrome DevTools, as browser-testing-with-devtools describes: console errors, failed requests, layout at each screen size of `design.md`.
 5. For a Figma screen, build from the approved images in `docs/specs/<EPIC-KEY>/design/` and the design system already in the code. Take the behaviour from the YAML of the screen.
-6. When your part is done:
+6. Leave a preview for the human, who reads it before the review: in `.ai/runs/<KEY>/preview/`, where KEY is the Story, or the item when it has no Sub-tasks, save a screenshot of each screen you built, at each screen size of `design.md`, named after the screen and the size (`S1-mobile.png`, `S1-desktop.png`). Take them with Chrome DevTools in the step where you look at the page, with test data only. When you fix a draft PR, take them again for what changed.
+7. When your part is done:
    - **A Sub-task:** make its Complete transition. If it was the last open Sub-task of the Story, open the PR.
    - **A Story or Task without Sub-tasks:** open the PR.
 
-   Open the PR with `ao-pr.mjs create`, its description from `.ai-orchestrator/templates/pull-request.md`.
-7. When a review asks for changes, fix them on the same branch, push, and answer with `ao-pr.mjs comment`.
+   Open the PR with `ao-pr.mjs create`, its description from `.ai-orchestrator/templates/pull-request.md`. It opens as a draft: the human previews it, and `/ao-review` marks it ready.
+8. When a review, or the human on a draft PR, asks for changes, fix them on the same branch, push, and answer with `ao-pr.mjs comment`.
 
 ## Where the contract beats your skills
 

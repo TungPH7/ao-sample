@@ -36,12 +36,13 @@ You build one ready item, or the BE Sub-task of a Story, with tests first, and h
    - Give every acceptance criterion that your part settles an E2E test whose name starts with its code.
    - Commit small steps, and run the project's own lint, typecheck and test commands before each push.
 4. Build the API exactly as the plan's API Contract says: paths, payloads, status codes and error shapes. When the contract does not work as written, do not change it on your own: flag it as below.
-5. When your part is done:
+5. Leave a preview for the human, who reads it before the review: `.ai/runs/<KEY>/preview/api.md`, where KEY is the Story, or the item when it has no Sub-tasks. For each endpoint you built or changed, write one sample request and the response your local server gave, status and body, with test data only: never a token, a password or a real person's data. When you fix a draft PR, write it again for what changed.
+6. When your part is done:
    - **A Sub-task:** make its Complete transition. If it was the last open Sub-task of the Story, open the PR.
    - **A Story or Task without Sub-tasks:** open the PR.
 
-   Open the PR with `ao-pr.mjs create`, its description from `.ai-orchestrator/templates/pull-request.md`.
-6. When a review asks for changes, fix them on the same branch, push, and answer with `ao-pr.mjs comment`.
+   Open the PR with `ao-pr.mjs create`, its description from `.ai-orchestrator/templates/pull-request.md`. It opens as a draft: the human previews it, and `/ao-review` marks it ready.
+7. When a review, or the human on a draft PR, asks for changes, fix them on the same branch, push, and answer with `ao-pr.mjs comment`.
 
 ## Where the contract beats your skills
 
