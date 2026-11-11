@@ -61,21 +61,15 @@ Danh sách ghi chú xếp mới nhất lên đầu (SPEC của SMP-2), nên mỗ
 
 ### User Stories
 
-**Story: Ghim ghi chú.** Là người dùng, tôi muốn ghim một ghi chú quan trọng lên đầu danh sách, để ghi chú mới không đẩy nó xuống.
+**Story: Ghim và bỏ ghim.** Là người dùng, tôi muốn ghim tối đa 3 ghi chú quan trọng lên đầu danh sách, và bỏ ghim một ghi chú khi không cần nó ở đầu nữa, để ghi chú mới không đẩy chúng xuống, và đầu danh sách luôn gọn, đúng là những ghi chú quan trọng nhất.
 
 - AC1: Given ghi chú A chưa ghim và đang có ít hơn 3 ghi chú được ghim, When bấm Ghim ở A, Then A lên đầu danh sách với dấu "Đã ghim", nút của A thành "Bỏ ghim", focus ở lại nút của A, và không cần tải lại trang.
 - AC2: Given đã ghim A rồi tới B, và có hai ghi chú chưa ghim C rồi D (D tạo sau C), When tải lại trang, hoặc mở trang Ghi chú ở một trình duyệt khác, Then thấy theo thứ tự B, A, D, C; B và A có dấu "Đã ghim", còn D và C thì không.
 - AC3: Given A đã được ghim, When tạo ghi chú mới E bằng form, Then A vẫn ở đầu danh sách, còn E hiện ngay dưới các ghi chú đã ghim, trên mọi ghi chú chưa ghim khác, và không cần tải lại trang.
 - AC4: Given đã bấm Ghim hoặc Bỏ ghim ở A và API chưa trả lời, When bấm nút đó thêm lần nữa, Then chỉ một yêu cầu được gửi, và A chỉ đổi trạng thái một lần.
 - AC5: Given API không ghim được, do lỗi mạng, lỗi máy chủ hoặc quá 10 s không trả lời, When bấm Ghim ở A, Then A vẫn chưa ghim và ở nguyên chỗ, và thấy "Không ghim được ghi chú. Vui lòng thử lại." ngay cạnh A, không ở ghi chú nào khác.
-
-**Story: Bỏ ghim ghi chú.** Là người dùng, tôi muốn bỏ ghim một ghi chú khi không cần nó ở đầu nữa, để nhường chỗ cho ghi chú khác.
-
 - AC6: Given A đã được ghim, A được tạo sau C và trước D, và C, D chưa ghim, When bấm Bỏ ghim ở A, Then A mất dấu "Đã ghim", nút của A thành "Ghim", A về giữa D và C theo thời gian tạo, focus ở lại nút của A, và không cần tải lại trang; tải lại trang vẫn thấy A chưa ghim, ở đúng chỗ đó.
 - AC7: Given API không bỏ ghim được, do lỗi mạng, lỗi máy chủ hoặc quá 10 s không trả lời, When bấm Bỏ ghim ở A, Then A vẫn được ghim và ở nguyên chỗ, và thấy "Không bỏ ghim được ghi chú. Vui lòng thử lại." ngay cạnh A, không ở ghi chú nào khác.
-
-**Story: Giới hạn 3 ghi chú được ghim.** Là người dùng, tôi muốn chỉ có tối đa 3 ghi chú được ghim, để đầu danh sách luôn gọn và đúng là những ghi chú quan trọng nhất.
-
 - AC8: Given đã có 3 ghi chú được ghim, When xem một ghi chú chưa ghim B, Then nút Ghim của B bị khóa, và dòng nhắc "Bỏ ghim một ghi chú để ghim ghi chú này" là mô tả của nút đó; bấm, trỏ chuột hay focus vào nút thì dòng nhắc hiện ra cạnh nút, nhưng không ghim B và không gửi yêu cầu nào; còn nút Bỏ ghim của 3 ghi chú đã ghim vẫn bấm được.
 - AC9: Given đã có 3 ghi chú được ghim và nút Ghim của B đang khóa, When bỏ ghim một trong 3 ghi chú đó, Then nút Ghim của B mở lại và dòng nhắc biến mất, không cần tải lại trang.
 - AC10: Given trang đang hiện ít hơn 3 ghi chú được ghim, nhưng ở API đã đủ 3 vì có người vừa ghim từ trình duyệt khác, When bấm Ghim ở B, Then B vẫn chưa ghim, danh sách tự tải lại và hiện đủ 3 ghi chú đã ghim ở đầu, và nút Ghim của B bị khóa, kèm dòng nhắc như AC8.
@@ -234,7 +228,7 @@ test('AC1 pins a note to the top of the list without reloading the page', async 
 
 ## Success Criteria
 
-- Ba Story trên đạt DoD, và E2E của từng tiêu chí AC1–AC11 đều pass trên môi trường Development.
+- Story "Ghim và bỏ ghim" ở trên đạt DoD, và E2E của từng tiêu chí AC1–AC11 đều pass trên môi trường Development.
 - Không chuỗi yêu cầu nào, qua giao diện hay gửi thẳng tới API, kể cả gửi cùng lúc, làm cho có hơn 3 ghi chú được ghim.
 - Trạng thái ghim giống nhau ở mọi trình duyệt, và còn nguyên sau khi tải lại trang, cho tới khi API khởi động lại.
 - Mỗi chữ ở mục Rules hiện đúng nguyên văn, đúng chỗ, và đọc được bằng trình đọc màn hình.
