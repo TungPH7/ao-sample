@@ -1,0 +1,9 @@
+# The apps /ao-preview starts, in order (ai-orchestrator, human-loop spec 4.3). The project owns this file; B1
+# (project-scaffold) moves it into the project's config.
+apps:
+  api:
+    command: npm run start:dev -w apps/api
+    url: http://localhost:3001/health
+  web:
+    command: npm run dev -w apps/web
+    url: http://localhost:3000/notes

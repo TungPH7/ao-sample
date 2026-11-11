@@ -70,12 +70,18 @@ async function wipAvailable(client, item, actor, contract, mapping) {
 }
 
 async function readLatestQaResult(client, key) {
+  return (await readLatestQaReport(client, key))?.result ?? null;
+}
+
+// The newest QA report of an item: { result, at } with `at` in ISO time, or null (human-loop spec 5.2 reads when it was
+// written, to tell the runs of one rebuild after QA fail from those of another).
+export async function readLatestQaReport(client, key) {
   const comments = await client.getAll(`/rest/api/3/issue/${encodeURIComponent(key)}/comment`, { orderBy: '-created' }, 'comments');
-  const reports = comments
+  const [newest] = comments
     .map(({ body, created }) => ({ result: qaReportResult(body), at: jiraTime(created) }))
     .filter(({ result }) => result)
     .sort((a, b) => b.at - a.at);
-  return reports[0]?.result ?? null;
+  return newest ? { result: newest.result, at: new Date(newest.at).toISOString() } : null;
 }
 
 // Milliseconds of a Jira timestamp such as 2026-10-28T10:00:00.000+0700, whose offset has no colon.
@@ -139,9 +145,10 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
       }
       return true;
     },
+    // A draft PR waits for your preview: the item stays In Progress until /ao-review marks it ready (human-loop spec 4.1).
     'pr-open': async () => {
       const pr = await newest();
-      return pr?.state === 'open' && intoBase(pr);
+      return pr?.state === 'open' && !pr.draft && intoBase(pr);
     },
     'ci-green': async () => {
       const pr = await newest();

@@ -2,10 +2,13 @@
 // and Staging for Playwright, and, once the run ends and before its worktree goes, the evidence attached to the item with
 // the CI token, and a check that the environment still runs the release qa tested. The effects are parameters.
 
-// AO_ENV_AUTH, a user variable of your Windows account, is "user:password". An error never quotes it.
+// AO_ENV_AUTH, a user variable of your Windows account, is "user:password". An error never quotes it. qa hands the pair
+// to curl on stdin, as the line user = "user:password" of a config (agents/prompts/qa.md), so that the password is on no
+// command line; a double quote, a backslash or a line break would break that line.
 export function basicAuthEnv(envAuth) {
   const at = typeof envAuth === 'string' ? envAuth.indexOf(':') : -1;
   if (at < 1 || at === envAuth.length - 1) throw new Error('AO_ENV_AUTH must be user:password, the basic auth of Development and Staging (docs/vps-setup.md section 11)');
+  if (/["\\\r\n]/.test(envAuth)) throw new Error('AO_ENV_AUTH must not hold a double quote, a backslash or a line break: qa passes it to curl in a config line (docs/vps-setup.md section 11)');
   return { E2E_HTTP_USER: envAuth.slice(0, at), E2E_HTTP_PASSWORD: envAuth.slice(at + 1) };
 }
 

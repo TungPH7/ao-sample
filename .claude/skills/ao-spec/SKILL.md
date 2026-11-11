@@ -1,7 +1,7 @@
 ---
 name: ao-spec
-description: Do stage spec of an Epic in Specifying with ba, ux and sa, up to its docs PR at gate ①.
-argument-hint: <EPIC>
+description: Do stage spec of an Epic in Specifying with ba, ux and sa, up to its docs PR at gate ①; with text after the key, change the SPEC as the human asks before the gate.
+argument-hint: <EPIC> [change]
 disable-model-invocation: true
 ---
 
@@ -9,16 +9,25 @@ disable-model-invocation: true
 
 !`node .ai-orchestrator/scripts/ao-step.mjs spec $0`
 
+## What the human wrote
+
+$ARGUMENTS
+
 ## What to do
 
+- The first word above is the Epic key. When more text follows it, that text is a change the human asks for in the
+  SPEC: write it, as it is, to `.ai/runs/<KEY>/note.md`, where KEY is the Epic, and add
+  `--note .ai/runs/<KEY>/note.md` to the command below. Never put that text in a shell command. With such text, run the
+  command below whatever the check said: ao-step decides with the change.
 - On STOP with Questions, show the human each question in Vietnamese, one list, and ask for the answers. When they
   answer, copy their reply word for word to `.ai/runs/<KEY>/answers.md`, where KEY is the Epic: add nothing, and do
   not restate the questions or the proposals. Then run the command below with `--answers .ai/runs/<KEY>/answers.md`
   added. Never put the answers in a shell command.
-- On any other STOP, tell the human the reason and the command or clicks it names, in Vietnamese, and stop.
+- On any other STOP, and no text after the key, tell the human the reason and the command or clicks it names, in
+  Vietnamese, and stop.
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs spec $0 --go` with the Bash tool in the background, with a
   timeout of 7200000 ms, and wait for its notification. Do not poll.
   Do not run any agent yourself, and do not change Jira or GitHub yourself.
-- Then read `.ai/runs/<KEY>/last.md` and report in Vietnamese: what each agent did and cost, the questions left (as
-  above), what the human must do at gate ① (numbered clicks: read the docs PR, then Approve spec on the Epic), and the
-  next command.
+- Then read `.ai/runs/<KEY>/last.md` and report in Vietnamese: what each agent did and cost, what changed in the SPEC
+  when the human asked for a change, the questions left (as above), what the human must do at gate ① (numbered
+  clicks: read the docs PR, then Approve spec on the Epic), and the next command.

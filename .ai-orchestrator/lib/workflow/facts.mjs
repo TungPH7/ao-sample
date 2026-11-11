@@ -9,7 +9,7 @@ import { approved, botLogin, protectedPaths } from '../quality/merge-gate.mjs';
 import { openFindings, readReviewReport } from '../quality/pull-request.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { expectedOptions } from '../tracker/expected.mjs';
-import { changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks } from '../tracker/facts.mjs';
+import { changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks, readLatestQaReport } from '../tracker/facts.mjs';
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
 import { openRequests } from './requests.mjs';
@@ -162,6 +162,7 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     securityCompare: compare && { base: since, status: compare.status, files: (compare.files ?? []).map(({ filename, previous_filename: previous, additions, deletions }) => ({ filename, previous_filename: previous, additions, deletions })) },
     merged: Boolean(pr.merged_at),
     mergeCommit: pr.merged_at ? pr.merge_commit_sha : null,
+    mergedAt: pr.merged_at ?? null,
     draft: Boolean(pr.draft),
     author: pr.user?.login ?? null,
     headRef: pr.head.ref,
@@ -228,6 +229,7 @@ export async function readDocs(github, epic, { gates, apps, approvers, space }, 
 // approvers, space }.
 export async function gatherFacts({ command, arg, jira, github, local, ...ctx }) {
   if (command === 'status' && !arg) return { command, space: ctx.space, ...(await readSpace({ jira, github, local, ...ctx })) };
+  if (command === 'intake') return { command, space: ctx.space, item: null, intake: await readIntake({ jira, ...ctx }) };
   // A release command works on the release, not on one item (release-workflow spec 2.6, 2.7).
   if (command === 'release') return { command, arg, extra: ctx.extra, space: ctx.space, item: null, runKey: arg ?? 'release', release: await readCutFacts({ jira, ...ctx }) };
   // vX.Y.0 ships a release; vX.Y.Z with Z > 0 a hotfix (spec 2.7, 2.8).
@@ -253,6 +255,8 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   }
   // /ao-qa reads deployments with your gh login (`deploys`): the read token of ao-review may not (release-workflow T12).
   const qa = command === 'qa' && pr ? await readQaFacts(ctx.deploys, pr, ctx) : undefined;
+  // After QA fail the PR of an item In Progress is merged: /ao-build reads the newest QA report (human-loop spec 5.2).
+  const qaReport = command === 'build' && item.state === 'in-progress' && pr?.merged ? await readLatestQaReport(jira, item.key) : undefined;
   // A kit another project reviewed needs no agent (kit-copy-review spec 2.1). Only on an open PR with green CI, which
   // /ao-review would review, and while a report is missing on its head: the compare reads GitHub and renders the agents
   // (review of ao-pilot PR #24). ctx.kitCopy(pr) resolves to null when the PR claims no such thing.
@@ -270,6 +274,7 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
     pr,
     dependenciesMerged: guards.includes('dependencies-merged'),
     ...(qa && { qa }),
+    ...(qaReport !== undefined && { qaReport }),
     ...(kitCopy && { kitCopy }),
     wip: await readWip(jira, item, ctx),
     ledger: local.ledger(item.key),
@@ -280,6 +285,21 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
 }
 
 const epicType = (contract) => contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
+
+// What /ao-intake prints (human-loop spec 3.1): the Epics of the space not done, newest first, the WIP of epic-shaping,
+// and the Jira ids of the Bug fields Found in and Severity, which the main session sets when it creates a Bug.
+export async function readIntake({ jira, contract, mapping, space }) {
+  const found = await jira.searchAll(`project = "${space}" AND issuetype = "${epicType(contract)}" AND statusCategory != Done ORDER BY created DESC`, ['summary', 'status']);
+  const [workflowId] = Object.entries(contract.workflows).find(([, w]) => w.applies_to.includes('epic'));
+  const shaping = ['specifying', 'planning'].map((state) => mapping.workflows[workflowId].states[state].status);
+  const fields = await jira.get('/rest/api/3/field');
+  const idOf = (id) => fields.find(({ name }) => name === mapping.fields[id].jira_field)?.id ?? null;
+  return {
+    epics: found.map(({ key, fields: f }) => ({ key, summary: f.summary, status: f.status.name })),
+    epicShaping: { used: found.filter(({ fields: f }) => shaping.includes(f.status.name)).length, limit: contract.wip_limits.find(({ id }) => id === 'epic-shaping').limit },
+    bugFields: { 'found-in': idOf('found-in'), severity: idOf('severity') },
+  };
+}
 
 // Room under the WIP limits: Epics shaping (spec or plan) and each dev agent the item would start.
 async function readWip(jira, item, { contract, mapping }) {
@@ -402,9 +422,9 @@ export async function readCutFacts({ jira, deploys, history, contract, mapping, 
       : { state: null, status: 'not on Jira', fixVersions: [] };
   }
   const items = Object.fromEntries(Object.entries(info).map(([key, { state }]) => [key, state]));
-  const { cut, included, after } = cutPoint({ commits, items, epics });
+  const { cut, included, after, cancelled } = cutPoint({ commits, items, epics });
   const withInfo = (list) => list.map(({ key }) => ({ key, ...info[key] }));
-  return { latestTag: newest, version: nextRelease(tags), commits: commits.length, cut, included: withInfo(included), after: withInfo(after), versions: facts.versions, releaseBranches: facts.releaseBranches };
+  return { latestTag: newest, version: nextRelease(tags), commits: commits.length, cut, included: withInfo(included), after: withInfo(after), cancelled: withInfo(cancelled), versions: facts.versions, releaseBranches: facts.releaseBranches };
 }
 
 const NOTES = ['changelog.md', 'pr-description.md', 'fix-version.md'];

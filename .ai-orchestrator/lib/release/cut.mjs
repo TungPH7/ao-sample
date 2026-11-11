@@ -4,15 +4,21 @@
 
 // commits: the first-parent history of develop since the newest release tag, oldest first, each { sha, subject, keys }
 // with the work item keys it names. items: the contract state of each item by key ('done', 'in-qa', ...).
-// Returns { cut, included, after }: `cut` is the commit of the cut point, or null when no commit up to a cut point holds
-// a Done item (guard cut-point-ready); `included` and `after` list { key, state }, in the order of each item's first
-// commit. Only Done counts: a Cancelled item, or one without a state, holds the cut point back until you sort it out.
+// Returns { cut, included, after, cancelled }: `cut` is the commit of the cut point, or null when no commit up to a cut
+// point holds a Done item (guard cut-point-ready); `included` and `after` list { key, state }, in the order of each
+// item's first commit. Only Done counts: an item without a state, such as one Jira does not know, holds the cut point
+// back until you sort it out.
 // epics: the keys that are Epics. An Epic is not released, its children are, and it completes only after they reach
 // Production, so a commit that names one, such as its spec, goes with the cut point that covers it.
+// A Cancelled item does not hold the cut point either (Pilot 2): Cancelled is a final state, so an item
+// cancelled after its merge would hold every later cut point back for good. Its commits go out with the cut point that
+// covers them, and `cancelled` lists those items apart, so you see at gate ④ the code that ships without an item Done
+// behind it. Revert it on develop first if it should not ship.
 export function cutPoint({ commits, items, epics = [] }) {
   const state = (key) => (Object.hasOwn(items, key) ? items[key] : null);
   const skipped = new Set(epics);
-  const work = commits.map(({ keys }) => keys.filter((key) => !skipped.has(key)));
+  const cancelledKey = (key) => !skipped.has(key) && state(key) === 'cancelled';
+  const work = commits.map(({ keys }) => keys.filter((key) => !skipped.has(key) && !cancelledKey(key)));
   const last = new Map();
   work.forEach((keys, i) => keys.forEach((key) => last.set(key, i)));
 
@@ -27,9 +33,11 @@ export function cutPoint({ commits, items, epics = [] }) {
   const order = [...new Set(work.flat())];
   const released = new Set(work.slice(0, cut + 1).flat());
   const list = (keys) => keys.map((key) => ({ key, state: state(key) }));
+  const shipped = released.size > 0 ? [...new Set(commits.slice(0, cut + 1).flatMap(({ keys }) => keys))].filter(cancelledKey) : [];
   return {
     cut: released.size > 0 ? commits[cut] : null,
     included: list(order.filter((key) => released.has(key))),
     after: list(order.filter((key) => !released.has(key))),
+    cancelled: list(shipped),
   };
 }

@@ -88,8 +88,9 @@ const changedPaths = (files = []) => [...new Set(files.flatMap(({ filename, prev
 // keys flagged.
 export async function runAudit({ github, jira, docs, mapping, space, sha, branch, gates, apps, approvers, dryRun = false, log = console.log }) {
   const { facts, docsKey } = await readAuditFacts({ github, docs, sha, branch, gates, apps, space });
+  // facts.sha, the full hash, takes the place of a short one.
   const decision = decideAudit({ sha, branch, ...facts, gates, apps, approvers, space });
-  const short = sha.slice(0, 7);
+  const short = facts.sha.slice(0, 7);
   if (decision.ok) {
     const what = decision.pr ? `the merge of PR #${decision.pr}${docsKey ? `, the docs PR of ${docsKey}` : ''}, which met every gate` : `a commit of ${botLogin(apps.dev)} that only changes ${RELEASE_BOT_PATHS.join(' and ')}`;
     log(`audit passed: ${short} on ${branch} is ${what}`);
@@ -120,22 +121,26 @@ export async function runAudit({ github, jira, docs, mapping, space, sha, branch
 }
 
 // The facts decideAudit needs for commit `sha` on `branch`, read with a GitHub client, and the Epic key when the commit
-// is the merge of a docs PR. `docs` ({ jira, passage }, a reading Jira client) reads the facts of a docs PR.
+// is the merge of a docs PR. `docs` ({ jira, passage }, a reading Jira client) reads the facts of a docs PR. GitHub
+// finds a commit by a short hash too, and the facts carry its full hash: a PR's merge commit is matched by the full one,
+// so a short hash read as a commit pushed without a PR (Pilot 2, T10).
 export async function readAuditFacts({ github, docs, sha, branch, gates, apps, space }) {
   const found = await github.get(`/commits/${sha}`);
+  const full = found.sha ?? sha;
   const commit = {
     author: found.author?.login ?? null,
     committer: found.committer?.login ?? null,
     parents: found.parents?.length ?? 0,
     files: found.files ?? [],
   };
-  const listed = mergedPull(await github.getAll(`/commits/${sha}/pulls`), sha, branch);
-  if (!listed) return { facts: { message: found.commit.message, commit, pull: null }, docsKey: null };
+  const listed = mergedPull(await github.getAll(`/commits/${full}/pulls`), full, branch);
+  if (!listed) return { facts: { sha: full, message: found.commit.message, commit, pull: null }, docsKey: null };
   // Only the PR itself says who merged it.
   const pull = await github.get(`/pulls/${listed.number}`);
   const files = await github.getAll(`/pulls/${pull.number}/files`);
   const docsKey = docsPullRequest({ pr: pull, files, gates, apps, space });
   const facts = {
+    sha: full,
     message: found.commit.message,
     commit,
     pull,
@@ -152,6 +157,13 @@ const fullSha = (value) => {
   if (!FULL_SHA.test(value)) throw new Error(`${JSON.stringify(value)} is not a full commit hash`);
   return value;
 };
+
+// The --sha of audit.mjs: a commit hash of 7 to 40 hex digits, in lower case. GitHub would also take a branch or a tag
+// name, and audit the commit it points to now.
+export function commitArgument(value) {
+  if (typeof value !== 'string' || !/^[0-9a-f]{7,40}$/i.test(value)) throw new Error(`--sha takes a commit hash of 7 to 40 hex digits, not ${JSON.stringify(value)}`);
+  return value.toLowerCase();
+}
 
 // Audits every first-parent commit of `branch` after `since` up to `head`, oldest first, and stops at the first that
 // fails (release-workflow spec 2.3 step 2): a commit pushed without a PR cannot hide under a valid one. When the
