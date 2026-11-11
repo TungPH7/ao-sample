@@ -22,10 +22,12 @@ flowchart LR
 
 S1 ở đây là màn hình S1 Ghi chú của SMP-2 (`docs/specs/SMP-2/design.md`, đã duyệt), nên file này chỉ vẽ phần thay đổi: mỗi mục của danh sách. Cách đọc:
 
-- Khối 1 tới 10 và khối 15 của S1 giữ nguyên như SMP-2, không vẽ lại.
-- Khối 11 tới 14 được cập nhật ở những chỗ YAML nêu. Phần còn lại của chúng giữ như SMP-2.
-- Khối 16 tới 19 là khối mới. Vì S1 đã được duyệt, khối mới lấy số tiếp theo, nên số khối không theo thứ tự đọc; thứ tự Tab ghi ở khối 11.
+- Khối 1 tới 10 của S1 giữ nguyên như SMP-2, không vẽ lại.
+- Khối 11 tới 15 được cập nhật ở những chỗ YAML nêu. Phần còn lại của chúng giữ như SMP-2.
+- Khối 16 tới 20 là khối mới. Vì S1 đã được duyệt, khối mới lấy số tiếp theo, nên số khối không theo thứ tự đọc; thứ tự Tab ghi ở khối 11.
 - Ghi chú chưa ghim trong hình không đánh số, trừ khối 18. Nút `(Ghim)` của nó là khối 17 ở trạng thái khác, và tiêu đề, thời gian, nội dung của nó là khối 12, 13, 14.
+- Không có Figma: S1 là ASCII và dòng Figma version là `none`. Hình ASCII không vẽ được màu, cỡ chữ hay khoảng cách; các giá trị đó nằm trong YAML, dùng lại màu của `globals.css`. Nếu sau này có Figma, S1 và số khối giữ nguyên.
+- AC11 chỉ về yêu cầu gửi thẳng tới API, nên không khối nào của S1 trỏ tới nó. AC11 được kiểm ở integration test và E2E của API.
 
 ### S1 · Ghi chú
 
@@ -35,6 +37,7 @@ S1 · Ghi chú · desktop
 | (các khối 1 tới 10 của S1 giữ nguyên, như trong SMP-2)                       |
 |                                                                              |
 | [11] Danh sách: ghi chú đã ghim ở trên, rồi tới ghi chú chưa ghim            |
+| [20] (ẩn khỏi mắt) Vùng thông báo cho trình đọc màn hình                     |
 | +--------------------------------------------------------------------------+ |
 | | [16] Đã ghim                                                             | |
 | | [12] Tiêu đề ghi chú                                  [13] Thời gian tạo | |
@@ -49,7 +52,7 @@ S1 · Ghi chú · desktop
 | | (Ghim)  [18] Bỏ ghim một ghi chú để ghim ghi chú này                     | |
 | +--------------------------------------------------------------------------+ |
 | (các ghi chú chưa ghim khác, cùng dạng, mới nhất ở trên)                     |
-| hoặc, thay cho cả danh sách: thông báo 15 của SMP-2, không đổi               |
+| hoặc, thay cho cả danh sách: [15] Thông báo chưa có ghi chú, hoặc lỗi tải    |
 +------------------------------------------------------------------------------+
 ```
 
@@ -59,6 +62,8 @@ S1 · Ghi chú · mobile
 | (các khối 1 tới 10 giữ nguyên)         |
 |                                        |
 | [11] Danh sách, đã ghim ở trên         |
+| [20] (ẩn khỏi mắt) Vùng thông báo      |
+|      cho trình đọc màn hình            |
 | +------------------------------------+ |
 | | [16] Đã ghim                       | |
 | | [12] Tiêu đề ghi chú               | |
@@ -78,7 +83,8 @@ S1 · Ghi chú · mobile
 | +------------------------------------+ |
 | (các ghi chú chưa ghim khác)           |
 | hoặc, thay cho cả danh sách:           |
-| thông báo 15 của SMP-2, không đổi      |
+| [15] Thông báo chưa có ghi chú,        |
+|      hoặc lỗi tải                      |
 +----------------------------------------+
 ```
 
@@ -94,7 +100,8 @@ blocks:
       đầu, ghi chú ghim gần nhất ở trên cùng, rồi tới các ghi chú chưa ghim, mới nhất ở trên (mục
       Rules của SPEC). Thứ tự do API trả về, web không tự sắp lại. Có tối đa 3 mục đã ghim. Kiểu của
       mục, đường kẻ 1 px giữa hai mục và khoảng cách 16 px giữ như SMP-2. Hai nhóm chỉ khác nhau ở
-      khối 16 và 17: nhóm đã ghim không có nền, viền hay đường kẻ riêng.
+      khối 16 và 17: nhóm đã ghim không có nền, viền hay đường kẻ riêng. Trang không hiện số ghi chú
+      đã ghim, như "2/3": dòng nhắc ở khối 18 đã đủ cho người dùng, và con số cần chữ mới.
     behavior: >-
       Ghim hay bỏ ghim thành công thì ghi chú đổi chỗ ngay khi API trả lời, không tải lại trang và
       không có hiệu ứng chuyển động; thứ tự trên trang khớp thứ tự API trả về khi tải lại trang
@@ -104,7 +111,9 @@ blocks:
       khi API từ chối ghim vì đã đủ 3 (AC2, AC10). Khi API từ chối vì đã đủ 3, danh sách tải lại một
       lần mà không hiện khung xương: danh sách cũ giữ nguyên cho tới khi có danh sách mới, và khối 17
       của ghi chú vừa bấm giữ trạng thái pending tới lúc đó. Nếu tải lại không được thì khối 11
-      không vẽ nữa và khối 15 của SMP-2 (lỗi tải danh sách) hiện thay.
+      không vẽ nữa và khối 15 (lỗi tải danh sách của SMP-2) hiện thay, và nhận focus. Hai ghi chú
+      được ghim hoặc bỏ ghim gần như cùng lúc thì mỗi ghi chú xử lý riêng (xem khối 17); sau mỗi câu
+      trả lời, thứ tự trên trang vẫn phải khớp thứ tự API trả về khi tải lại trang.
     states:
       loading: Như SMP-2, khung xương; chưa có khối 16, 17 nào
       limit-reached: >-
@@ -113,8 +122,8 @@ blocks:
     a11y: >-
       ul và li thật như SMP-2. Câu "danh sách không có phần tử nào nhận Tab" của SMP-2 không còn
       đúng: mỗi mục có đúng một phần tử nhận Tab là khối 17. Thứ tự Tab của trang là 4, 6, 9, rồi
-      khối 17 của từng mục từ trên xuống. Khối 16, 18, 19 không nhận Tab. Khi một mục đổi chỗ,
-      focus ở lại khối 17 của chính nó.
+      khối 17 của từng mục từ trên xuống. Khối 16, 18, 19, 20 không nhận Tab. Khi một mục đổi chỗ,
+      focus ở lại khối 17 của chính nó. Khối 20 nằm ngoài ul, vì ul chỉ chứa li.
     ac: [AC1, AC2, AC3, AC6, AC10]
   12:
     name: Tiêu đề của ghi chú
@@ -133,6 +142,20 @@ blocks:
     type: text
     content: Không đổi so với khối 14 của S1 trong SMP-2.
     behavior: Ghi chú có nội dung trống thì không vẽ khối này; khối 17 nằm ngay dưới khối 12 và 13.
+  15:
+    name: Thông báo thay cho danh sách
+    type: text
+    content: >-
+      Không đổi so với khối 15 của S1 trong SMP-2: "Chưa có ghi chú nào." hoặc "Không tải được danh
+      sách ghi chú. Vui lòng thử lại.", hiện thay cho khối 11, không bao giờ cùng lúc với nó.
+    behavior: >-
+      Chỉ có một chỗ khác SMP-2. Khi khối này hiện vì danh sách không tải lại được sau khi API từ
+      chối ghim vì đã đủ 3 (AC10), khối 17 đang giữ focus bị gỡ khỏi trang, nên khối này nhận focus
+      để focus không rơi về đầu tài liệu. Ở các lần khác nó không nhận focus, như SMP-2.
+    a11y: >-
+      Khi nhận focus, đặt tabindex="-1" cho nó: nhận được focus bằng mã nhưng không vào thứ tự Tab.
+      role="alert" của lỗi tải giữ nguyên, nên lỗi vẫn được đọc.
+    ac: [AC10]
   16:
     name: Dấu Đã ghim
     type: text
@@ -161,11 +184,13 @@ blocks:
       Bấm Ghim thì gửi một yêu cầu ghim ghi chú đó; bấm Bỏ ghim thì gửi một yêu cầu bỏ ghim. Ghi
       chú chỉ đổi trạng thái, đổi nút và đổi chỗ khi API trả lời thành công, không đổi trước rồi trả
       lại khi lỗi. Sau khi đổi chỗ, nút của chính ghi chú đó nhận lại focus, kể cả khi ghi chú nhảy
-      lên đầu hay về giữa danh sách; nút ngoài màn hình thì trình duyệt cuộn nó vào tầm nhìn (AC1,
-      AC6). Bấm khi nút đang pending hay đang khóa thì không gửi yêu cầu nào (AC4, AC8). Khi lỗi,
+      lên đầu hay về giữa danh sách. Khi trả focus không đặt preventScroll, nên nút ngoài màn hình
+      thì trình duyệt cuộn nó vào tầm nhìn: bỏ ghim một ghi chú cũ có thể làm trang cuộn tới chỗ
+      rất xa, và đó là chủ ý, để người dùng thấy ghi chú đi đâu (AC1, AC6). Bấm khi nút đang
+      pending hay đang khóa thì không gửi yêu cầu nào (AC4, AC8). Khi lỗi,
       ghi chú giữ nguyên trạng thái và chỗ, và khối 19 hiện (AC5, AC7). Khi API từ chối ghim vì đã
-      đủ 3, nút thành trạng thái khóa, khối 18 hiện cạnh nút, khối 19 không hiện, và nút vẫn giữ
-      focus (AC10). Bấm lại nút thì khối 19 của ghi chú đó mất, lúc yêu cầu được gửi. Mỗi ghi chú
+      đủ 3, nút thành trạng thái khóa, khối 18 hiện cạnh nút, khối 20 đọc câu đó cho trình đọc màn
+      hình, khối 19 không hiện, và nút vẫn giữ focus (AC10). Bấm lại nút thì khối 19 của ghi chú đó mất, lúc yêu cầu được gửi. Mỗi ghi chú
       xử lý riêng: nút của ghi chú khác không đổi trạng thái trong lúc một ghi chú chờ API.
     states:
       pin: Chữ "Ghim". Viền 1 px --border, chữ --foreground, nền --background
@@ -181,7 +206,8 @@ blocks:
         Chỉ ở nút "Ghim", khi trang có 3 ghi chú đã ghim. Chữ và viền màu --muted, viền đứt nét,
         con trỏ chuột kiểu not-allowed, nên nút khóa không chỉ khác bằng màu. Đặt
         aria-disabled="true", không dùng disabled: vẫn nhận Tab và focus. Bấm hay nhấn Enter, Space
-        thì không gửi yêu cầu nào, chỉ hiện khối 18. Nút "Bỏ ghim" không bao giờ bị khóa (AC8, AC9)
+        thì không gửi yêu cầu nào, chỉ hiện khối 18, và không xóa khối 19 nếu nó đang hiện. Nút
+        "Bỏ ghim" không bao giờ bị khóa (AC8, AC9)
     a11y: >-
       Là button thật, bấm được bằng Enter và Space. Tên truy cập gồm chữ của nút rồi tới tiêu đề
       của ghi chú: aria-labelledby trỏ tới chính nút rồi tới khối 12 của mục, nên đọc là "Ghim
@@ -216,7 +242,7 @@ blocks:
     a11y: >-
       Luôn nằm trong cây truy cập của nút Ghim bị khóa, kể cả khi mắt không thấy nó: có id và là
       đích aria-describedby của khối 17, nên trình đọc màn hình đọc nó khi tới nút. Không phải
-      role="tooltip" và không phải vùng aria-live. Hiện được bằng bàn phím (focus) lẫn chuột, nên
+      role="tooltip" và không phải vùng aria-live: việc đọc ngay lúc API từ chối là của khối 20. Hiện được bằng bàn phím (focus) lẫn chuột, nên
       không cần chuột. Chữ --muted đạt tương phản 4.5:1 ở cả chế độ sáng và tối, và đọc được khi
       phóng chữ 200%.
     ac: [AC8, AC9, AC10]
@@ -233,8 +259,10 @@ blocks:
       lời, hoặc ghi chú không còn ở API (AC5, AC7); ghi chú giữ nguyên trạng thái và chỗ. Không hiện
       khi API từ chối ghim vì đã đủ 3: khi đó hiện khối 18 (AC10). Mất khi người dùng bấm lại khối
       17 của ghi chú đó (lúc yêu cầu được gửi) và hiện lại nếu lỗi lại; mất khi tải lại trang.
-      Không mất khi ghim hay bỏ ghim ghi chú khác, hay khi danh sách tải lại. Không chiếm chỗ khi
-      không có lỗi.
+      Không mất khi ghim hay bỏ ghim ghi chú khác, hay khi danh sách tải lại. Vì vậy một ghi chú có
+      thể vừa còn khối 19 vừa có nút Ghim bị khóa, khi người dùng ghim ghi chú khác cho đủ 3 sau
+      lúc lỗi: khối 19 vẫn hiện, bấm vào nút khóa không xóa nó vì không gửi yêu cầu nào, và mô tả
+      của nút gồm cả khối 18 và khối 19. Không chiếm chỗ khi không có lỗi.
     states:
       none: Không vẽ khối này
       pin-error: Chữ "Không ghim được ghi chú. Vui lòng thử lại.", ở ghi chú chưa ghim
@@ -245,17 +273,29 @@ blocks:
       khi hiện, còn focus vẫn ở khối 17. Nằm trong li của ghi chú và là mô tả (aria-describedby)
       của khối 17 của ghi chú đó, nên lỗi gắn với đúng ghi chú của nó.
     ac: [AC5, AC7]
+  20:
+    name: Vùng thông báo cho trình đọc màn hình
+    type: text
+    content: >-
+      Một vùng role="status" cho cả danh sách, ẩn khỏi mắt và không chiếm chỗ, nằm ngay trước hoặc
+      sau ul của khối 11 và có mặt từ lúc trang vẽ danh sách, để trình đọc màn hình theo dõi nó từ
+      đầu. Trống lúc thường. Ba câu: "Đã ghim ghi chú." khi ghim thành công, "Đã bỏ ghim ghi chú."
+      khi bỏ ghim thành công, và "Bỏ ghim một ghi chú để ghim ghi chú này" khi API từ chối ghim vì
+      đã đủ 3. Câu thứ ba giống từng chữ với khối 18, nên khi kiểm theo chữ phải chỉ rõ khối nào.
+    behavior: >-
+      Mỗi lần có thông báo mới, vùng được xóa rồi đặt lại chữ, để cùng một câu hai lần liên tiếp
+      vẫn được đọc. Chỉ đặt chữ khi API đã trả lời: ghim thành công (AC1), bỏ ghim thành công (AC6),
+      hoặc từ chối vì đã đủ 3 (AC10). Lỗi mạng hay lỗi máy chủ không đặt chữ ở đây, vì đã có khối 19.
+    states:
+      empty: Không có chữ
+      announcing: Có đúng một trong ba câu trên
+    a11y: >-
+      Không nhận Tab và không hiện ra cho mắt thường ở trạng thái nào. Không thay cho tên truy cập
+      của khối 17, mô tả của khối 17 và thông báo của khối 19: chỉ bổ sung cho người dùng trình đọc
+      màn hình, vì khi bấm focus đứng yên và ghi chú đã nhảy đi chỗ khác.
+    ac: [AC1, AC6, AC10]
 ```
 
 ## Open Questions
 
-Các câu hỏi dưới đây chưa có người trả lời, nên mỗi câu có đề xuất của `ux`. Chỗ nào ghi "design chưa có" thì dev không làm cho tới khi được duyệt và design được sửa.
-
-- **Không có Figma.** Epic không có link khung Figma và hộp `.ai/design-inbox/SMP-23/` không có, nên S1 là ASCII và dòng Figma version là `none`. Hình ASCII không vẽ được màu, cỡ chữ hay khoảng cách; các giá trị đó nằm trong YAML của S1, dùng lại màu của `globals.css`. Đề xuất: Epic thử này không cần Figma.
-- **Báo cho trình đọc màn hình khi ghim thành công hoặc bị từ chối.** Ghim hay bỏ ghim thành công chỉ làm ghi chú đổi chỗ và nút đổi chữ; khi API từ chối vì đã đủ 3 (AC10), nút chỉ chuyển sang khóa. Người dùng trình đọc màn hình có thể không nghe gì, vì focus đứng yên và mô tả của nút đổi mà không được đọc lại. Đề xuất: thêm một vùng `role="status"` ẩn khỏi mắt, đọc "Đã ghim ghi chú." hoặc "Đã bỏ ghim ghi chú." khi thành công, và đọc lại đúng câu của dòng nhắc (khối 18) khi bị từ chối. Hai câu đầu là chữ mới ngoài mục Rules của SPEC, nên cần `ba` duyệt. Design chưa có vùng này.
-- **Ghim hoặc bỏ ghim hai ghi chú gần như cùng lúc.** SPEC chỉ nói nút của ghi chú đang chờ thì chờ. Đề xuất: mỗi ghi chú xử lý riêng, nút của ghi chú khác vẫn bấm được trong lúc đó (khối 17). Nếu hai câu trả lời tới lần lượt, thứ tự trên trang vẫn phải khớp thứ tự API trả về; `sa` chọn cách đảm bảo, như gọi lại `GET`, vì design không ép được.
-- **Lỗi cũ còn lại khi nút bị khóa.** Ghi chú B ghim không thành và đang hiện khối 19, rồi người dùng ghim ghi chú khác cho đủ 3, nên nút Ghim của B bị khóa. SPEC chỉ cho khối 19 mất khi bấm lại nút của B hoặc tải lại trang, nên lúc đó B vừa có lỗi vừa bị khóa. Đề xuất: giữ đúng SPEC; không thêm quy tắc xóa lỗi khi nút bị khóa, và bấm vào nút khóa không xóa lỗi vì không gửi yêu cầu nào. Khi đó mô tả của nút gồm cả hai câu.
-- **Số ghi chú đã ghim, như "2/3".** SPEC cho phép design vẽ nó. Đề xuất: không vẽ, vì dòng nhắc khi đủ 3 đã đủ cho người dùng, và con số cần chữ mới. Design chưa có.
-- **Tải lại danh sách sau khi API từ chối không được.** Khi đó khối 11 biến mất và khối 15 hiện thay (AC13 của SMP-2), nên khối 17 đang giữ focus bị gỡ khỏi trang và focus rơi về đầu tài liệu. Đề xuất: chuyển focus tới khối 15 (đặt `tabindex="-1"`), khối này đã có `role="alert"` nên lỗi vẫn được đọc. Design chưa có.
-- **Bỏ ghim ghi chú cũ trong danh sách dài.** Ghi chú về đúng chỗ theo thời gian tạo, có thể cách rất xa chỗ nó đang đứng ở đầu danh sách, và trang cuộn theo vì focus ở lại nút của nó (AC6). Đề xuất: chấp nhận, không đặt `preventScroll`: nếu không cuộn thì nút có focus nằm ngoài màn hình và người dùng không thấy ghi chú đi đâu.
-- **AC11 không có khối giao diện.** AC11 chỉ về yêu cầu gửi thẳng tới API nên không khối nào của S1 trỏ tới nó; AC11 được kiểm ở integration test và E2E của API.
+Không có.
