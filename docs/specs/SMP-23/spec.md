@@ -1,6 +1,6 @@
 # Spec: Ghim ghi chú lên đầu danh sách
 
-> **Epic:** SMP-23 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-23 · **Status:** Draft
+> **Epic:** SMP-23 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-23 · **Status:** Approved 2026-11-11
 
 ## Objective
 

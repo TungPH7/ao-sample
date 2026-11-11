@@ -1,6 +1,6 @@
 # Design: Ghim ghi chú lên đầu danh sách
 
-> **Epic:** SMP-23 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-23 · **Spec:** docs/specs/SMP-23/spec.md · **Status:** Draft
+> **Epic:** SMP-23 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SMP-23 · **Spec:** docs/specs/SMP-23/spec.md · **Status:** Approved 2026-11-11
 >
 > **Figma version:** none
 
