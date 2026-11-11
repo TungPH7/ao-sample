@@ -27,7 +27,8 @@ Danh sách ghi chú xếp mới nhất lên đầu (SPEC của SMP-2), nên mỗ
 **Giới hạn.** Tối đa 3 ghi chú được ghim cùng lúc. API kiểm giới hạn này, không chỉ giao diện chặn. Con số 3 là một hằng số có tên, dùng chung cho web và API.
 
 - Khi danh sách trên trang đã có 3 ghi chú được ghim, nút Ghim của mọi ghi chú chưa ghim bị khóa, kèm dòng nhắc. Nút Bỏ ghim của 3 ghi chú đã ghim vẫn bấm được.
-- Web khóa nút theo danh sách nó đang có. Danh sách có thể cũ, vì có người vừa ghim từ trình duyệt khác. Khi đó API là nơi quyết định: nó từ chối, và web tải lại danh sách (AC10).
+- Web khóa nút theo danh sách nó đang có. Danh sách có thể cũ, vì có người vừa ghim từ trình duyệt khác. Khi đó API là nơi quyết định: nó từ chối. Web tải lại danh sách, rồi hiện dòng nhắc như khi nút Ghim bị khóa, không hiện thông báo lỗi ghim (AC10).
+- Dòng nhắc luôn là mô tả của nút Ghim bị khóa, để trình đọc màn hình đọc được khi tới nút. Mắt thường thấy nó cạnh nút khi người dùng bấm, trỏ chuột hay focus vào nút bị khóa. Nó không lặp sẵn ở mọi ghi chú chưa ghim, vì danh sách có thể dài tới 1000 ghi chú. `ux` vẽ nó trong design.md.
 - Ghim một ghi chú đã được ghim thì thành công và không đổi gì: ghi chú giữ chỗ trong nhóm đã ghim và không bị tính thêm vào giới hạn. Bỏ ghim một ghi chú chưa ghim cũng thành công và không đổi gì. Nhờ vậy, hai người bấm cùng một nút gần như cùng lúc đều thấy kết quả mình muốn, không ai thấy lỗi.
 
 **Khi nào trang đổi.**
@@ -56,8 +57,6 @@ Danh sách ghi chú xếp mới nhất lên đầu (SPEC của SMP-2), nên mỗ
 | Ghim không thành | Không ghim được ghi chú. Vui lòng thử lại. |
 | Bỏ ghim không thành | Không bỏ ghim được ghi chú. Vui lòng thử lại. |
 
-Hai thông báo lỗi ghim và bỏ ghim là đề xuất, chờ bạn duyệt (Open Questions 2).
-
 ### User Stories
 
 **Story: Ghim ghi chú.** Là người dùng, tôi muốn ghim một ghi chú quan trọng lên đầu danh sách, để ghi chú mới không đẩy nó xuống.
@@ -75,7 +74,7 @@ Hai thông báo lỗi ghim và bỏ ghim là đề xuất, chờ bạn duyệt (
 
 **Story: Giới hạn 3 ghi chú được ghim.** Là người dùng, tôi muốn chỉ có tối đa 3 ghi chú được ghim, để đầu danh sách luôn gọn và đúng là những ghi chú quan trọng nhất.
 
-- AC8: Given đã có 3 ghi chú được ghim, When xem một ghi chú chưa ghim B, Then nút Ghim của B bị khóa, kèm dòng nhắc "Bỏ ghim một ghi chú để ghim ghi chú này"; bấm nút đó không ghim B và không gửi yêu cầu nào; còn nút Bỏ ghim của 3 ghi chú đã ghim vẫn bấm được.
+- AC8: Given đã có 3 ghi chú được ghim, When xem một ghi chú chưa ghim B, Then nút Ghim của B bị khóa, và dòng nhắc "Bỏ ghim một ghi chú để ghim ghi chú này" là mô tả của nút đó; bấm, trỏ chuột hay focus vào nút thì dòng nhắc hiện ra cạnh nút, nhưng không ghim B và không gửi yêu cầu nào; còn nút Bỏ ghim của 3 ghi chú đã ghim vẫn bấm được.
 - AC9: Given đã có 3 ghi chú được ghim và nút Ghim của B đang khóa, When bỏ ghim một trong 3 ghi chú đó, Then nút Ghim của B mở lại và dòng nhắc biến mất, không cần tải lại trang.
 - AC10: Given trang đang hiện ít hơn 3 ghi chú được ghim, nhưng ở API đã đủ 3 vì có người vừa ghim từ trình duyệt khác, When bấm Ghim ở B, Then B vẫn chưa ghim, danh sách tự tải lại và hiện đủ 3 ghi chú đã ghim ở đầu, và nút Ghim của B bị khóa, kèm dòng nhắc như AC8.
 - AC11: Given đã có 3 ghi chú được ghim, When một yêu cầu ghim một ghi chú khác gửi thẳng tới API, không qua giao diện, Then API trả lỗi 409, và không ghi chú nào đổi trạng thái: danh sách API trả về vẫn có đúng 3 ghi chú được ghim, và ghi chú vừa bị từ chối vẫn chưa ghim.
@@ -207,6 +206,7 @@ test('AC1 pins a note to the top of the list without reloading the page', async 
   - Test ghim ghi chú thật (AC1–AC7) nằm chung một file chạy tuần tự, và bỏ ghim những gì mình ghim, theo mục Code Style.
   - AC11 ghim lần lượt ghi chú của chính nó cho tới khi API trả 409. Nhờ vậy test đúng dù trước đó đã có bao nhiêu ghi chú được ghim. Xong thì nó bỏ ghim những ghi chú nó đã ghim.
   - Plan của `sa` nói cách làm chi tiết, trong giới hạn của mục Boundaries.
+- **Rủi ro chấp nhận trên Development:** trạng thái ghim ở đó dùng chung với người thật. Nếu có người ghim đủ 3 ghi chú lúc QA chạy, các test ghim ghi chú thật (AC1–AC7) fail, vì nút Ghim bị khóa. Epic chấp nhận rủi ro này. Test không bỏ ghim ghi chú của người khác, và không có endpoint bỏ mọi ghim chỉ cho test. Khi gặp, bạn bỏ ghim trên Development rồi chạy lại QA.
 - **Regression:** toàn bộ E2E của SMP-2 và `e2e/smoke.spec.ts` vẫn pass, kể cả khi đang có 1 tới 3 ghi chú được ghim, sau khi sửa theo mục Changes to SMP-2.
 
 ## Boundaries
@@ -240,9 +240,4 @@ test('AC1 pins a note to the top of the list without reloading the page', async 
 
 ## Open Questions
 
-1. **API từ chối ghim vì đã đủ 3**, chẳng hạn người khác vừa ghim từ trình duyệt khác (Open Point của Epic). Đề xuất của Epic: giao diện tải lại danh sách và hiện dòng nhắc như khi nút Ghim bị khóa. SPEC viết theo đề xuất này ở AC10.
-2. **Ghim hay bỏ ghim không thành do lỗi mạng hay lỗi máy chủ** (Open Point của Epic). Đề xuất của Epic: ghi chú giữ trạng thái cũ, và một thông báo lỗi hiện ngay cạnh ghi chú đó. SPEC viết theo đề xuất này ở AC5 và AC7, và đề xuất thêm:
-   - Nguyên văn hai thông báo: "Không ghim được ghi chú. Vui lòng thử lại." và "Không bỏ ghim được ghi chú. Vui lòng thử lại.", theo kiểu thông báo lỗi lưu của SMP-2.
-   - Thông báo mất khi bấm lại nút của ghi chú đó, hoặc khi tải lại trang.
-3. **Dòng nhắc khi đã đủ 3 hiện ở đâu.** Danh sách có thể dài tới 1000 ghi chú, nên lặp cùng một dòng nhắc ở mọi ghi chú chưa ghim thì rối. Đề xuất: dòng nhắc luôn là mô tả của nút bị khóa, để trình đọc màn hình đọc được. Mắt thường thấy nó cạnh nút khi bấm, trỏ chuột hay focus vào nút bị khóa, thay vì lặp ở mọi ghi chú. `ux` chốt cách vẽ trong design.md. AC8 chỉ đòi nút bị khóa có dòng nhắc kèm theo.
-4. **E2E trên Development dùng chung trạng thái ghim với người thật.** Nếu có người ghim đủ 3 ghi chú trên Development lúc QA chạy, các test ghim ghi chú thật (AC1–AC7) sẽ fail, vì nút Ghim bị khóa. Đề xuất: chấp nhận rủi ro này. Test chỉ bỏ ghim ghi chú chính nó ghim, không thêm endpoint bỏ mọi ghim chỉ cho test. Khi gặp, bạn bỏ ghim trên Development rồi chạy lại QA.
+Không có.
