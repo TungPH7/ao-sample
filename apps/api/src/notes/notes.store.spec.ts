@@ -2,7 +2,7 @@ import { MAX_NOTES, NotesStore } from './notes.store.js';
 import type { Note } from './notes.shared.js';
 
 function note(id: string, createdAt = '2026-11-02T07:40:00.000Z'): Note {
-  return { id, title: `Title ${id}`, content: '', createdAt };
+  return { id, title: `Title ${id}`, content: '', createdAt, pinnedAt: null };
 }
 
 describe('NotesStore', () => {

@@ -42,6 +42,7 @@ describe('NotesService', () => {
         title: 'Mua sữa',
         content: '2 hộp',
         createdAt: '2026-11-02T07:40:00.123Z',
+        pinnedAt: null,
       });
     });
 
@@ -72,7 +73,7 @@ describe('NotesService', () => {
       expect(created.content).toBe('Caf\u00e9\nline\nend');
     });
 
-    it('ignores the id, createdAt and any other field sent', () => {
+    it('ignores the id, createdAt, pinnedAt and any other field sent', () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date('2026-11-02T07:40:00.000Z'));
 
@@ -80,6 +81,7 @@ describe('NotesService', () => {
         title: 'A',
         id: 'chosen-by-client',
         createdAt: '1999-01-01T00:00:00.000Z',
+        pinnedAt: '2000-01-01T00:00:00.000Z',
         isAdmin: true,
       });
 
@@ -88,6 +90,7 @@ describe('NotesService', () => {
         title: 'A',
         content: '',
         createdAt: '2026-11-02T07:40:00.000Z',
+        pinnedAt: null,
       });
     });
 

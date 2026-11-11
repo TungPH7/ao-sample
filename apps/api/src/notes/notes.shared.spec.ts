@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs';
 import type { FieldError } from '../common/api-error.js';
 import {
   CONTENT_MAX_CHARS,
+  MAX_PINNED_NOTES,
   TITLE_MAX_CHARS,
   checkContent,
   checkNote,
   checkTitle,
   countChars,
+  isPinned,
   normalizeContent,
   normalizeTitle,
 } from './notes.shared.js';
@@ -35,6 +37,26 @@ describe('limits', () => {
 
   it('allows 1000 characters in a content', () => {
     expect(CONTENT_MAX_CHARS).toBe(1000);
+  });
+
+  it('allows 3 pinned notes at a time', () => {
+    expect(MAX_PINNED_NOTES).toBe(3);
+  });
+});
+
+describe('isPinned', () => {
+  it('is true when pinnedAt is a string', () => {
+    expect(isPinned({ pinnedAt: '2026-11-11T03:00:00.000Z' })).toBe(true);
+  });
+
+  it('is false when pinnedAt is null', () => {
+    expect(isPinned({ pinnedAt: null })).toBe(false);
+  });
+
+  it('is false when the note has no pinnedAt, as an older answer has', () => {
+    const older = {} as { pinnedAt: string | null };
+
+    expect(isPinned(older)).toBe(false);
   });
 });
 
@@ -371,14 +393,17 @@ describe('shared types', () => {
       title: 'Mua sữa',
       content: '2 hộp',
       createdAt: '2026-11-02T07:40:00.000Z',
+      pinnedAt: null,
     };
+    const pinned: Note = { ...note, pinnedAt: '2026-11-11T03:00:00.000Z' };
     const input: CreateNoteInput = { title: 'Mua sữa' };
     const list: NoteList = { data: [note] };
     const field: NoteField = 'content';
     const code: NoteFieldErrorCode = 'INVALID_TYPE';
     const error: NoteFieldError = { field, code };
 
-    expect([input, list, error]).toStrictEqual([
+    expect([pinned.pinnedAt, input, list, error]).toStrictEqual([
+      '2026-11-11T03:00:00.000Z',
       { title: 'Mua sữa' },
       { data: [note] },
       { field: 'content', code: 'INVALID_TYPE' },

@@ -4,12 +4,15 @@
 
 export const TITLE_MAX_CHARS = 100;
 export const CONTENT_MAX_CHARS = 1000;
+// The most notes pinned at a time (docs/specs/SMP-23/plan.md, decision 2).
+export const MAX_PINNED_NOTES = 3;
 
 export interface Note {
   id: string; // crypto.randomUUID()
   title: string; // normalized: NFC, line breaks as \n, no spaces at both ends; 1–100 characters
   content: string; // normalized: NFC, line breaks as \n; 0–1000 characters; "" when not sent
   createdAt: string; // ISO 8601 UTC with milliseconds, such as "2026-11-02T07:40:00.000Z"
+  pinnedAt: string | null; // when the API received the pin request, ISO 8601 UTC with milliseconds; null when not pinned
 }
 export interface CreateNoteInput {
   title: string;
@@ -24,6 +27,11 @@ export type NoteFieldErrorCode = 'REQUIRED' | 'TOO_LONG' | 'INVALID_TYPE';
 export interface NoteFieldError {
   field: NoteField;
   code: NoteFieldErrorCode;
+}
+
+// True when pinnedAt is a string, so a note without the field, as in an older answer, is not pinned.
+export function isPinned(note: Pick<Note, 'pinnedAt'>): boolean {
+  return typeof note.pinnedAt === 'string';
 }
 
 const LINE_BREAK = /\r\n?/g;

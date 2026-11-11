@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 function note(id: string, title: string, content: string): Note {
-  return { id, title, content, createdAt: '2026-11-02T07:40:00.000Z' };
+  return { id, title, content, createdAt: '2026-11-02T07:40:00.000Z', pinnedAt: null };
 }
 
 describe('the note list', () => {

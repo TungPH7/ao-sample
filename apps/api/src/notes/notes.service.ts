@@ -37,6 +37,7 @@ export class NotesService {
       title: checked.value.title,
       content: checked.value.content,
       createdAt: new Date().toISOString(),
+      pinnedAt: null, // a new note is never pinned, whatever the body sends
     };
     if (!this.store.add(note)) {
       throw new NotesLimitReachedException();
