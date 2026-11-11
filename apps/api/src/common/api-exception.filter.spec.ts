@@ -18,6 +18,7 @@ import { ApiExceptionFilter } from './api-exception.filter.js';
 import {
   FieldError,
   NotesLimitReachedException,
+  PinnedNotesLimitReachedException,
   ValidationFailedException,
 } from './api-error.js';
 
@@ -209,6 +210,41 @@ describe('ApiExceptionFilter', () => {
           message: 'The limit of stored notes is reached.',
         },
       });
+    });
+  });
+
+  describe('PinnedNotesLimitReachedException', () => {
+    it('answers 409 PINNED_NOTES_LIMIT_REACHED with its fixed message', () => {
+      const answer = catchWithFilter(new PinnedNotesLimitReachedException());
+
+      expect(answer.statusCode).toBe(409);
+      expect(answer.body).toStrictEqual({
+        error: {
+          code: 'PINNED_NOTES_LIMIT_REACHED',
+          message: 'The limit of pinned notes is reached.',
+        },
+      });
+    });
+
+    it('is a ConflictException', () => {
+      const exception = new PinnedNotesLimitReachedException();
+
+      expect(exception).toBeInstanceOf(ConflictException);
+      expect(exception.getStatus()).toBe(409);
+    });
+
+    it('never repeats the message of the exception', () => {
+      const answer = catchWithFilter(
+        new PinnedNotesLimitReachedException(BODY_MARKER),
+      );
+
+      expect(JSON.stringify(answer.body)).not.toContain(BODY_MARKER);
+    });
+
+    it('does not log', () => {
+      catchWithFilter(new PinnedNotesLimitReachedException());
+
+      expect(logError).not.toHaveBeenCalled();
     });
   });
 
