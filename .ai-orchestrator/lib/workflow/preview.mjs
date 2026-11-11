@@ -18,9 +18,14 @@ apps:
 
 const NAME = /^[a-z][a-z0-9-]*$/;
 const LOCAL = new Set(['localhost', '127.0.0.1']);
+// A command runs with no shell (Semgrep's spawn-shell-true, found by the sast job of ao-sample PR #21): npm or node, then
+// words split on spaces. Quotes, pipes, redirections and variables would need a shell, so they are refused.
+const TOOLS = ['npm', 'node'];
+const SHELL_CHARS = /["'`$|&;<>(){}*?\\]/;
 
-// The apps of preview.yaml, in order: [{ name, command, url, port, env }]. Throws with every problem when the file is
-// wrong. A command is one line, which ao-step gives to the shell as it is; a URL is on this machine, with its port.
+// The apps of preview.yaml, in order: [{ name, command, argv, url, port, env }]. Throws with every problem when the file
+// is wrong. A command is npm or node and its words, which ao-step runs with no shell; a URL is on this machine, with
+// its port.
 export function readPreviewConfig(text) {
   let data;
   try {
@@ -34,7 +39,9 @@ export function readPreviewConfig(text) {
   const read = apps.map(([name, app]) => {
     const where = `apps.${name}`;
     if (!NAME.test(name)) problems.push(`${where}: a name is lower-case letters, digits and hyphens`);
+    const argv = typeof app?.command === 'string' ? app.command.trim().split(/\s+/) : [];
     if (typeof app?.command !== 'string' || app.command.trim() === '' || /[\r\n]/.test(app.command)) problems.push(`${where}.command: one line, the command that starts the app`);
+    else if (!TOOLS.includes(argv[0]) || SHELL_CHARS.test(app.command)) problems.push(`${where}.command: npm or node and plain words, run with no shell, such as npm run dev -w apps/web`);
     let url = null;
     try {
       url = new URL(app?.url);
@@ -44,7 +51,7 @@ export function readPreviewConfig(text) {
     if (url && (!['http:', 'https:'].includes(url.protocol) || !LOCAL.has(url.hostname) || !url.port)) problems.push(`${where}.url: http://localhost with a port, not ${app.url}`);
     const env = app?.env ?? {};
     if (typeof env !== 'object' || Array.isArray(env) || Object.values(env).some((value) => typeof value !== 'string')) problems.push(`${where}.env: names and text values`);
-    return { name, command: app?.command, url: app?.url, port: url ? Number(url.port) : null, env };
+    return { name, command: app?.command, argv, url: app?.url, port: url ? Number(url.port) : null, env };
   });
   if (problems.length > 0) throw new Error(`${PREVIEW_FILE}: ${problems.join('; ')}`);
   return read;

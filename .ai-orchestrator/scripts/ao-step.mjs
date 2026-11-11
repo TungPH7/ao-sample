@@ -24,7 +24,7 @@ import { readGates } from '../lib/quality/gates.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { markReadyForReview, READY_PERMISSIONS } from '../lib/quality/pr-ready.mjs';
 import { appCredentials, botIdentity, githubRepoOf, installationToken, userVariable } from '../lib/quality/github-app.mjs';
-import { runNpm } from '../lib/quality/npm.mjs';
+import { npmCli, runNpm } from '../lib/quality/npm.mjs';
 import { attachEvidence } from '../lib/tracker/attachments.mjs';
 import { createGitHubClient, readGitHubToken } from '../lib/tracker/github-client.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
@@ -765,8 +765,11 @@ async function startPreview({ key, number, branch }) {
   const record = () => writeFileSync(previewActive, `${JSON.stringify({ key, pr: number, branch, head, apps, startedAt: new Date().toISOString() }, null, 2)}\n`);
   for (const app of config) {
     const log = openSync(join(previewDir, `${app.name}.log`), 'w');
-    // The command is one line of the project's own file, given to the shell as it is.
-    const child = spawn(app.command, { cwd: projectDir, env: { ...env, ...app.env }, shell: true, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
+    // npm or node and its words, with no shell: npm through npm-cli.js next to node, as runNpm does (lib/quality/npm.mjs).
+    const [tool, ...words] = app.argv;
+    const cli = tool === 'npm' ? npmCli() : null;
+    const [file, args] = tool === 'node' ? [process.execPath, words] : cli ? [process.execPath, [cli, ...words]] : ['npm', words];
+    const child = spawn(file, args, { cwd: projectDir, env: { ...env, ...app.env }, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
     child.unref();
     apps.push({ name: app.name, url: app.url, port: app.port, pid: child.pid });
     record();
