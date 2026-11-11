@@ -69,7 +69,7 @@ Plan giữ một Story như SPEC: "Ghim và bỏ ghim" (AC1–AC11). Story chia 
       - AC10: `GET` đầu tiên trả 2 ghi chú ghim. `PUT` trả 409 với thân đúng dạng của ADR-0003, và `GET` thứ hai trả 3 ghi chú ghim. Kiểm có đúng 1 `PUT` và 2 `GET`.
     - AC2: ghim A rồi B qua `request`, rồi mở trang trong `browser.newContext()` để giả một trình duyệt khác. Kiểm vị trí tương đối: B rồi A ở đầu danh sách, có dấu; D đứng trước C, không có dấu.
     - AC11: tạo 4 ghi chú, ghim lần lượt từng cái cho tới khi API trả 409. Sau đó kiểm `GET` có đúng 3 ghi chú ghim, và ghi chú bị từ chối vẫn chưa ghim. Cách này đúng dù trước đó đã có ghi chú của người khác được ghim.
-    - Tên test bắt đầu bằng mã tiêu chí của SMP-23. `be-dev` viết `pin-helpers.ts` (trừ `itemWithTitle`) và test AC11. `fe-dev` viết các tiêu chí còn lại và sửa E2E của SMP-2 theo mục Changes to SMP-2 của SPEC.
+    - Tên test bắt đầu bằng mã tiêu chí của SMP-23. `fe-dev` viết cả `pin-helpers.ts`, E2E của mọi tiêu chí AC1–AC11, và sửa E2E của SMP-2 theo mục Changes to SMP-2 của SPEC. Lý do: mọi E2E, kể cả AC11, đi qua đường `/api/notes/:id/pin` của web, mà rewrite của đường đó do Sub-task FE thêm (quyết định 5). `be-dev` không viết E2E: ở API, AC11 đã được integration test của Sub-task BE kiểm, với 409 ở ghi chú thứ tư.
 
 ## API Contract
 
@@ -203,7 +203,7 @@ Không item nào có effort `xhigh` hay `max`. Phần bảo mật đều có tes
       - Integration, cùng file: khi đã có 2 ghi chú ghim, `Promise.all` gửi 5 yêu cầu ghim 5 ghi chú khác nhau. Đúng 1 yêu cầu được 200, 4 yêu cầu nhận 409, và `GET` có đúng 3 ghi chú ghim.
       - Integration, cùng file: nạp 1000 ghi chú dài tối đa, ghim 3, rồi đo `PUT`, `DELETE` và `GET`, mỗi yêu cầu dưới 1 s (NFR, Hiệu năng).
       - Sửa `apps/api/test/notes.e2e-spec.ts`: thân `POST` mong đợi trong `toStrictEqual` có thêm `pinnedAt: null`.
-      - E2E: `e2e/notes-pin/pin-helpers.ts` và test AC11 trong `e2e/notes-pin/pin-real-notes.spec.ts` (quyết định 12).
+      - Không có E2E: Sub-task BE giữ unit test và integration test của API. E2E AC11 và `pin-helpers.ts` thuộc Sub-task FE (quyết định 12).
   - **Sub-task FE**, 5 file code và 1 mục cấu hình:
     - `apps/web/next.config.ts`: thêm mục rewrite theo quyết định 5, và sửa chú thích "Exactly one path is forwarded".
     - `apps/web/src/app/notes/notes-api.ts`: như mục API Contract.
@@ -230,7 +230,10 @@ Không item nào có effort `xhigh` hay `max`. Phần bảo mật đều có tes
         - lỗi chỉ hiện ở ghi chú của nó, mất khi bấm lại, và còn khi danh sách được thay; lỗi cũ vẫn còn khi nút bị khóa, và mô tả của nút gồm cả S1.18 lẫn S1.19;
         - hai câu trả lời tới ngược thứ tự thì danh sách cũ bị bỏ qua; ghi chú vừa tạo không mất khi một danh sách tới mà thiếu nó;
         - 409 rồi tải lại không được thì hiện lỗi tải S1.15, và S1.15 có focus.
-      - E2E: AC1–AC7 trong `e2e/notes-pin/pin-real-notes.spec.ts`; AC8, AC9 và AC10 trong `e2e/notes-pin/pin-limit-faked.spec.ts`; thêm `itemWithTitle` vào `pin-helpers.ts` (quyết định 12).
+      - E2E (quyết định 12):
+        - `e2e/notes-pin/pin-helpers.ts`: `uniqueTitle`, `createNote`, `pinNote`, `unpinNote` và `itemWithTitle`, tất cả gửi qua web;
+        - AC1–AC7 và AC11 trong `e2e/notes-pin/pin-real-notes.spec.ts`;
+        - AC8, AC9 và AC10 trong `e2e/notes-pin/pin-limit-faked.spec.ts`.
       - Sửa E2E của SMP-2:
         - `e2e/notes/create-note.spec.ts`: hàm `firstNote` lấy mục đầu tiên không có chữ "Đã ghim". AC1, AC2 và AC7 dùng hàm này.
         - `e2e/notes/notes-limit.spec.ts`: ghi chú giả có thêm `pinnedAt: null`.
