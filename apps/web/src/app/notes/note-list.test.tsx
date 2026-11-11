@@ -179,6 +179,13 @@ describe('the pin button of each note (S1.17)', () => {
     expect(buttonOf('Gọi mẹ').hasAttribute('aria-busy')).toBe(false);
   });
 
+  test('adds no p to an item when its button is locked, so the content stays the only p of the item', () => {
+    render(<NoteList notes={[pinned('p1', 'P1'), pinned('p2', 'P2'), pinned('p3', 'P3'), note('a', 'A', '2 hộp')]} />);
+
+    const paragraphs = itemOf('A').querySelectorAll('p');
+    expect(Array.from(paragraphs, (p) => p.textContent)).toEqual(['2 hộp']);
+  });
+
   test('is open on every note while fewer than 3 notes are pinned', () => {
     render(<NoteList notes={[pinned('p1', 'P1'), pinned('p2', 'P2'), note('a', 'A', '')]} />);
 

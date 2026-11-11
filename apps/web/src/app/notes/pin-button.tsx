@@ -126,10 +126,12 @@ export default function PinButton({
         ) : null}
         {pinned ? "Bỏ ghim" : "Ghim"}
       </button>
+      {/* A div, not a p: a p in an item is the content of the note [S1.14] to the E2E tests of SMP-2, and every
+          unpinned item holds this hint while 3 notes are pinned. */}
       {isLocked ? (
-        <p id={hintId(noteId)} hidden={!shown} className="text-sm text-muted">
+        <div id={hintId(noteId)} hidden={!shown} className="text-sm text-muted">
           {HINT}
-        </p>
+        </div>
       ) : null}
     </div>
   );
