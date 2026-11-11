@@ -8,7 +8,7 @@
 
 | Code | Name | Route | User story | Kind |
 |---|---|---|---|---|
-| S1 | Ghi chú | /notes | Story Ghim ghi chú (AC1–AC5): Là người dùng, tôi muốn ghim một ghi chú quan trọng lên đầu danh sách, để ghi chú mới không đẩy nó xuống. Story Bỏ ghim ghi chú (AC6–AC7): Là người dùng, tôi muốn bỏ ghim một ghi chú khi không cần nó ở đầu nữa, để nhường chỗ cho ghi chú khác. Story Giới hạn 3 ghi chú được ghim (AC8–AC11): Là người dùng, tôi muốn chỉ có tối đa 3 ghi chú được ghim, để đầu danh sách luôn gọn và đúng là những ghi chú quan trọng nhất. | ASCII |
+| S1 | Ghi chú | /notes | Story Ghim và bỏ ghim (AC1–AC11): Là người dùng, tôi muốn ghim tối đa 3 ghi chú quan trọng lên đầu danh sách, và bỏ ghim một ghi chú khi không cần nó ở đầu nữa, để ghi chú mới không đẩy chúng xuống, và đầu danh sách luôn gọn, đúng là những ghi chú quan trọng nhất. | ASCII |
 
 ## Flow
 
