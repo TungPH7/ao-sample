@@ -25,6 +25,13 @@ export function instructionPaths(dir, { readdirSync }, prefix = '') {
   return found;
 }
 
+// Whether a path of a PR is, or is inside, an instruction file or folder, at any depth: /ao-preview does not run such a
+// PR from the project folder, where Claude Code would load them (review of ao-sample PR #21).
+export function isInstructionPath(path) {
+  const parts = path.replaceAll('\\', '/').split('/').map((part) => part.toLowerCase());
+  return parts.some((part) => INSTRUCTION_FOLDERS.includes(part)) || INSTRUCTION_FILES.includes(parts.at(-1));
+}
+
 // Removes them; returns the paths removed. rmSync removes a link, not what it points to. fs: { readdirSync, rmSync }.
 export function removeInstructions(dir, fs) {
   const paths = instructionPaths(dir, fs);

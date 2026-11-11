@@ -3,16 +3,24 @@
 // item after it, which it does with its Agent name first (agents/rules.md). /ao-status lists the open ones. Pure.
 import { adfText, jiraTime } from '../tracker/facts.mjs';
 
-// comments: the comments of an item as GET /issue/{key}/comment gives them (ADF or plain text body). agentNames: role
-// → Agent field value, such as { ba: 'Business Analyst' }. Returns the open requests, oldest first:
-// [{ from, to, text, at }], where from is the asking role, or null when the comment has no Agent name (you).
-export function openRequests(comments, agentNames) {
+// The asker of a request written by the agents' Jira account without an Agent name: an agent, but not which one. Every
+// agent writes with that one account, and the name is only a rule of its prompt, so such a comment is never taken for
+// the human's (review of ao-sample PR #21).
+export const UNSIGNED_AGENT = 'agent';
+
+// comments: the comments of an item as GET /issue/{key}/comment gives them (ADF or plain text body, with their author).
+// agentNames: role → Agent field value, such as { ba: 'Business Analyst' }. agentAccount: the account id of the agents'
+// identity in tracker/jira.yaml. Returns the open requests, oldest first: [{ from, to, text, at }], where from is the
+// asking role, UNSIGNED_AGENT for a comment of the agents' account with no Agent name, or null for the human.
+export function openRequests(comments, agentNames, { agentAccount } = {}) {
   const roleOf = new Map(Object.entries(agentNames).map(([role, name]) => [name, role]));
   const read = comments
-    .map(({ created, body }) => {
+    .map(({ created, body, author }) => {
       const text = (typeof body === 'string' ? body : adfText(body)).trim();
-      const author = [...roleOf.keys()].find((name) => text.startsWith(`${name}:`));
-      return { at: jiraTime(created), from: author ? roleOf.get(author) : null, rest: author ? text.slice(author.length + 1).trim() : text };
+      const name = [...roleOf.keys()].find((agentName) => text.startsWith(`${agentName}:`));
+      const byAgents = Boolean(agentAccount) && author?.accountId === agentAccount;
+      const from = name ? roleOf.get(name) : byAgents ? UNSIGNED_AGENT : null;
+      return { at: jiraTime(created), from, rest: name ? text.slice(name.length + 1).trim() : text };
     })
     .sort((a, b) => a.at - b.at);
   const open = [];

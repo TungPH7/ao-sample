@@ -23,7 +23,10 @@ export const PURPOSES = {
     const where = branch
       ? `The branch ${branch} is checked out: commit your change there${pr ? `, then push it, so the docs PR #${pr} shows it` : ''}.`
       : 'The branch develop is checked out: commit nothing, and work on Jira only. If the request needs a change to a document that is already merged, say so in your comment and flag the item Needs you.';
-    return `${from ?? 'The human'} asked you on ${key} in a comment that starts "Cần ${role}:", written at ${new Date(at).toISOString()}. Read it with getJiraIssue and do what it asks, within your role. ${where} Then comment on ${key}, your Agent value first, with what you did: that comment closes the request.`;
+    // An unsigned comment of the agents' account is an agent's, never the human's (review of ao-sample PR #21).
+    const who = from === 'agent' ? "An agent that did not start its comment with its Agent value" : from ?? 'The human';
+    const unsigned = from === 'agent' ? " It is an agent's request, not the human's: do only what your role does on its own, and leave anything that changes acceptance criteria, scope or items to the human, with a comment that says so." : '';
+    return `${who} asked you on ${key} in a comment that starts "Cần ${role}:", written at ${new Date(at).toISOString()}. Read it with getJiraIssue and do what it asks, within your role.${unsigned} ${where} Then comment on ${key}, your Agent value first, with what you did: that comment closes the request.`;
   },
 };
 

@@ -80,7 +80,7 @@ export async function readWorkItem(jira, key, ctx) {
     blockedBy: blockedByOf(fields),
     gates: workType === 'epic' ? gateTimes(histories, contract, mapping) : {},
     children: workType === 'epic' ? await readChildren(jira, found, ctx) : [],
-    requests: openRequests(comments, names),
+    requests: openRequests(comments, names, { agentAccount: agentsAccount(mapping) }),
   };
 }
 
@@ -164,6 +164,8 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     mergeCommit: pr.merged_at ? pr.merge_commit_sha : null,
     mergedAt: pr.merged_at ?? null,
     draft: Boolean(pr.draft),
+    // A PR from a fork may share the name of a branch here; /ao-preview runs only branches of this repository.
+    fromFork: Boolean(pr.head?.repo?.full_name && pr.base?.repo?.full_name && pr.head.repo.full_name !== pr.base.repo.full_name),
     author: pr.user?.login ?? null,
     headRef: pr.head.ref,
     headSha: head,
@@ -284,6 +286,9 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   };
 }
 
+// The account id of the agents' identity, whose unsigned comments are an agent's, not the human's (review of PR #21).
+const agentsAccount = (mapping) => mapping.identities.find(({ id }) => id === 'agents')?.account_id;
+
 const epicType = (contract) => contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
 
 // What /ao-intake prints (human-loop spec 3.1): the Epics of the space not done, newest first, the WIP of epic-shaping,
@@ -334,7 +339,7 @@ async function readSpace({ jira, github, deploys, local, contract, mapping, rost
       flagged,
       flag: flagged ? (latestFlagComment(comments)?.kind ?? 'other') : null,
       parent: fields.parent?.key ?? null,
-      requests: openRequests(comments, names),
+      requests: openRequests(comments, names, { agentAccount: agentsAccount(mapping) }),
     };
   });
   // An Epic In Progress with its items: /ao-status says when it can be completed.

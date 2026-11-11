@@ -27,7 +27,9 @@ No agent runs here (human-loop spec 4.3).
   and starts the apps, which keep running after it ends. Do not start, stop or change anything yourself.
 - Then report in Vietnamese:
   - the URLs to open;
-  - that the project folder is on the PR branch, and that the apps run code no reviewer has read yet, on this machine;
+  - that the project folder is on the PR branch, and that the apps run code no reviewer has read yet, on this machine:
+    no secret variable of the session reaches them, but they run under the human's Windows user, so they can read
+    the human's files, the App key files and the variables of HKCUEnvironment;
   - not to edit files while the preview runs;
   - to ask for changes, `/ao-fix <PR> be: … fe: …`, which stops the preview first;
   - when done, `/ao-preview <KEY> --stop`, or `/ao-review <PR>`, which stops it too.

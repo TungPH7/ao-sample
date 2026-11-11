@@ -20,7 +20,8 @@ $ARGUMENTS
   propose a split, each part starting a line with `be:` or `fe:`. When they say OK, or give their own split, write it,
   as it is, to `.ai/runs/<KEY>/note.md`, where KEY is the item, and run the command below with
   `--note .ai/runs/<KEY>/note.md` added. Never put that text in a shell command. When the text after the key above
-  already splits the defects that way, use it as it is.
+  already splits the defects that way, use it as it is. After QA fail of an item with one dev agent, text after the key
+  goes the same way, as words for that agent: write it to `note.md` and add `--note`.
 - On any other STOP, tell the human the reason and the command or clicks it names, in Vietnamese, and stop.
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs build $0 --go` with the Bash tool in the background, with a
   timeout of 7200000 ms, and wait for its notification. Do not poll.

@@ -17,6 +17,7 @@ import { checkBranch, parseBranch } from '../tracker/conventions.mjs';
 import { splitNote } from './notes.mjs';
 import { PREVIEW_FILE, PREVIEW_SAMPLE } from './preview.mjs';
 import { answersPrompt, promptFor, resumePrompt } from './prompts.mjs';
+import { isInstructionPath } from './review-tree.mjs';
 import { openQuestions } from './runs.mjs';
 import { fullReviewEffort, securityScope } from './security-scope.mjs';
 
@@ -67,7 +68,7 @@ function carryOn(command, facts, options, asker) {
     // session, and is made afresh (reviewer of ao-pilot PR #23).
     if (!last.session) return null;
     // The head and the note stay on the record of the run: /ao-fix reads them to know a note is done.
-    const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key), ...(last.head && { head: last.head }), ...(last.note && { note: last.note }), ...(last.rebuild && { rebuild: last.rebuild }) };
+    const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key), ...(last.head && { head: last.head }), ...(last.note && { note: last.note }), ...(last.rebuild && { rebuild: last.rebuild }), ...(last.request && { request: last.request }) };
     if (REVIEWS.includes(last.purpose)) {
       // A review goes on only on the head it was reviewing, with its worktree back, while its report is not on that
       // head: on a new head, ao-pr would post what it wrote about the old one as the report of the new head.
@@ -285,12 +286,16 @@ function afterPlanGate(facts) {
 // The command that runs an open request, after its text: /ao-request for ba, ux and sa (human-loop spec 3.3).
 const runsRequest = ({ to }, key) => (ADVISERS.includes(to) ? ` → /ao-request ${key}` : '');
 
+// A preview that runs, for /ao-status (human-loop spec 4.3): the folder is on a PR branch until it stops.
+const previewLine = ({ key, branch, apps = [] }) => `the preview of ${key} runs on ${branch}${apps.length > 0 ? `: ${apps.map(({ name, url }) => `${name} ${url}`).join(', ')}` : ', its apps stopped'} → /ao-preview ${key} --stop`;
+
 // /ao-status: the item and what comes next, or every item of the space.
 function decideStatus(facts) {
   if (!facts.item) return spaceStatus(facts);
   const lines = [facts.item.workType === 'epic' ? epicLine(facts) : itemLine(facts)];
   const cost = (facts.run?.runs ?? []).reduce((total, r) => total + (r.costUsd ?? 0), 0);
   if (facts.run?.runs?.length) lines.push(`Runs: ${facts.run.runs.length}, ${usd(cost)} in all; the last: ${describeRun(facts.run.runs.at(-1))}`);
+  if (facts.previewRunning) lines.unshift(previewLine(facts.previewRunning));
   for (const request of facts.item.requests) lines.push(`Open request to ${request.to}${request.from ? ` from ${request.from}` : ''}: ${request.text}${runsRequest(request, facts.item.key)}`);
   return { status: true, lines, next: nextFor(facts.item, facts.pr?.state === 'open' ? facts.pr.number : null, facts.pr?.draft) };
 }
@@ -300,7 +305,7 @@ function spaceStatus(facts) {
   const prOf = new Map(facts.pulls.map(({ key, number, draft }) => [key, { number, draft }]));
   const costOf = new Map(facts.runs.map(({ key, runs = [] }) => [key, runs.reduce((total, r) => total + (r.costUsd ?? 0), 0)]));
   const lines = [];
-  const yours = [];
+  const yours = facts.previewRunning ? [previewLine(facts.previewRunning)] : [];
   for (const item of facts.items.filter(({ workType }) => workType !== 'sub-task')) {
     const pull = prOf.get(item.key);
     const next = nextFor(item, pull?.number ?? null, pull?.draft);
@@ -847,7 +852,7 @@ function decideRollback(facts) {
 // /ao-preview <KEY> [--stop] (human-loop spec 4.3): no agent. ao-step switches the project folder to the PR branch and
 // starts the apps of preview.yaml, or stops them and goes back to develop. facts.preview: { stop, config, configError,
 // active, agentRunning, dirty, busy, install }, read by ao-step from this machine.
-function decidePreview(facts) {
+function decidePreview(facts, options = {}) {
   const { item, pr, preview: p } = facts;
   const urls = (apps) => apps.map(({ name, url }) => `${name} ${url}`).join(', ');
   if (p.stop) {
@@ -863,9 +868,17 @@ function decidePreview(facts) {
     return out(stop(runs, `/ao-preview ${p.active.key} --stop, when you are done with it`));
   }
   if (pr?.state !== 'open') return out(stop(`${key} has no open PR to preview`, nextFor(item, null)));
-  if (pr.protectedPaths.length > 0) {
-    return out(stop(`PR #${pr.number} changes ${pr.protectedPaths.join(', ')}, which steer the kit and the agents: during a preview every /ao-* command would run them. Read those changes in the diff instead`, `/ao-review ${pr.number}`));
+  // Protected paths, and instruction files at any depth (CLAUDE.md, AGENTS.md, a nested .claude/), which Claude Code would
+  // load from the folder during the preview (review of ao-sample PR #21).
+  // A protected path in another case counts too: Windows writes .Claude/ into .claude/ (review of ao-sample PR #21).
+  const guarded = (path) => (options.gates?.protected_paths ?? []).some(({ path: glob }) => matchesGlob(glob, path, { ignoreCase: true }));
+  const steering = [...new Set([...pr.protectedPaths, ...(pr.files ?? []).filter((path) => isInstructionPath(path) || guarded(path))])];
+  if (steering.length > 0) {
+    return out(stop(`PR #${pr.number} changes ${steering.join(', ')}, which steer the kit and the agents: during a preview every /ao-* command, and your own session, would load them. Read those changes in the diff instead`, `/ao-review ${pr.number}`));
   }
+  // Only a branch of this repository, and only once CI (secrets, sast, policy, tests) passed on its head (review of PR #21).
+  if (pr.fromFork) return out(stop(`PR #${pr.number} comes from another repository: /ao-preview runs only a branch of this one`, `/ao-review ${pr.number}`));
+  if (!pr.ci.green) return out(stop(pr.ci.failed ? `CI is red on the head of PR #${pr.number}` : `CI is still running on the head of PR #${pr.number}`, pr.ci.failed ? `/ao-fix ${pr.number}` : `/ao-preview ${key} once CI is done`));
   if (p.agentRunning) return out(stop(`ao-step is running ${p.agentRunning.command} ${p.agentRunning.arg}: the project folder is busy`, `Wait for it to end, then /ao-preview ${key}`));
   if (p.dirty > 0) return out(stop(`the project folder has changes not committed (${p.dirty} files)`, `Commit them, or put them aside with git stash, then /ao-preview ${key}`));
   if (p.configError) return out(stop(p.configError, `Fix ${PREVIEW_FILE}, then /ao-preview ${key}`));

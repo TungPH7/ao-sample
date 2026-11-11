@@ -57,6 +57,14 @@ export function readPreviewConfig(text) {
   return read;
 }
 
+// The environment of the apps of a preview, which run code nobody reviewed (review of ao-sample PR #21): without the
+// variables an agent run clears (`cleared`, lib/agents/launch.mjs), and without any whose name says it holds a secret,
+// such as ATLASSIAN_AGENT_TOKEN, GH_TOKEN, AO_DEV_APP_KEY_FILE or a password.
+const SECRET_NAME = /TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|_KEY$|_KEY_FILE$|^ATLASSIAN_|^AO_ENV_AUTH$/i;
+export function previewEnv(env, cleared = []) {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !cleared.includes(name) && !SECRET_NAME.test(name)));
+}
+
 // The hash of a package-lock.json, to know whether the packages installed are those of the head.
 export const lockHash = (text) => createHash('sha256').update(text ?? '').digest('hex');
 
