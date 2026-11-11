@@ -115,7 +115,7 @@ describe('NotesStore pins', () => {
   }
 
   describe('pin', () => {
-    it('answers PINNED, records the time and moves the note to the top', () => {
+    it('answers PINNED, records the time and moves the note to the top when no note is pinned', () => {
       const store = storeWith('a', 'b', 'c');
 
       expect(store.pin('a', T1)).toBe('PINNED');
@@ -124,24 +124,35 @@ describe('NotesStore pins', () => {
       expect(store.list()[0]).toStrictEqual({ ...note('a'), pinnedAt: T1 });
     });
 
-    it('lists the most recently pinned note first', () => {
+    it('lists the earliest pin first and a later pin right below it (AC2)', () => {
+      // C and D are not pinned, D added after C.
       const store = storeWith('a', 'b', 'c', 'd');
 
       store.pin('a', T1);
       store.pin('b', T2);
 
-      expect(ids(store)).toEqual(['b', 'a', 'd', 'c']);
+      expect(ids(store)).toEqual(['a', 'b', 'd', 'c']);
+    });
+
+    it('puts a new pin at the bottom of the pinned notes and keeps the places of the others (AC1)', () => {
+      const store = storeWith('a', 'b', 'c', 'd', 'e');
+      store.pin('d', T1);
+      store.pin('a', T2);
+
+      store.pin('c', T3);
+
+      expect(ids(store)).toEqual(['d', 'a', 'c', 'e', 'b']);
     });
 
     it('keeps the order of the requests for pins of the same millisecond', () => {
-      const store = storeWith('a', 'b', 'c');
+      const store = storeWith('a', 'b', 'c', 'd');
 
       store.pin('b', T1);
       store.pin('a', T1);
-      expect(ids(store)).toEqual(['a', 'b', 'c']);
+      expect(ids(store)).toEqual(['b', 'a', 'd', 'c']);
 
       store.pin('c', T1);
-      expect(ids(store)).toEqual(['c', 'a', 'b']);
+      expect(ids(store)).toEqual(['b', 'a', 'c', 'd']);
     });
 
     it('keeps the id, title, content and createdAt of the note', () => {
@@ -179,7 +190,7 @@ describe('NotesStore pins', () => {
         expect(store.pin('a', T3)).toBe('ALREADY_PINNED');
 
         expect(store.list()).toStrictEqual(before);
-        expect(store.list()[1]).toMatchObject({ id: 'a', pinnedAt: T1 });
+        expect(store.list()[0]).toMatchObject({ id: 'a', pinnedAt: T1 });
       });
 
       it('answers ALREADY_PINNED even when 3 notes are pinned', () => {
@@ -203,7 +214,7 @@ describe('NotesStore pins', () => {
 
         expect(store.pin('c', T3)).toBe('PINNED');
 
-        expect(pinnedIds(store)).toEqual(['c', 'b', 'a']);
+        expect(pinnedIds(store)).toEqual(['a', 'b', 'c']);
       });
 
       it('answers LIMIT_REACHED for a fourth note and changes nothing', () => {
@@ -216,7 +227,7 @@ describe('NotesStore pins', () => {
         expect(store.pin('d', T4)).toBe('LIMIT_REACHED');
 
         expect(store.list()).toStrictEqual(before);
-        expect(pinnedIds(store)).toEqual(['c', 'b', 'a']);
+        expect(pinnedIds(store)).toEqual(['a', 'b', 'c']);
       });
 
       it('pins again once one of the 3 is unpinned', () => {
@@ -228,7 +239,7 @@ describe('NotesStore pins', () => {
 
         expect(store.pin('d', T4)).toBe('PINNED');
 
-        expect(pinnedIds(store)).toEqual(['d', 'c', 'a']);
+        expect(pinnedIds(store)).toEqual(['a', 'c', 'd']);
       });
     });
   });
@@ -272,7 +283,7 @@ describe('NotesStore pins', () => {
 
       store.unpin('b');
 
-      expect(ids(store)).toEqual(['c', 'a', 'd', 'b']);
+      expect(ids(store)).toEqual(['a', 'c', 'd', 'b']);
     });
 
     it('answers NOT_PINNED for a note that is not pinned and changes nothing', () => {
@@ -285,16 +296,17 @@ describe('NotesStore pins', () => {
       expect(store.list()).toStrictEqual(before);
     });
 
-    it('lets a note pinned again go to the top with its new time', () => {
-      const store = storeWith('a', 'b', 'c');
+    it('puts a note pinned again at the bottom of the pinned notes with its new time, not back in its old place', () => {
+      const store = storeWith('a', 'b', 'c', 'd');
       store.pin('a', T1);
       store.pin('b', T2);
+      store.pin('c', T3);
       store.unpin('a');
 
-      expect(store.pin('a', T3)).toBe('PINNED');
+      expect(store.pin('a', T4)).toBe('PINNED');
 
-      expect(ids(store)).toEqual(['a', 'b', 'c']);
-      expect(store.list()[0].pinnedAt).toBe(T3);
+      expect(ids(store)).toEqual(['b', 'c', 'a', 'd']);
+      expect(store.list()[2].pinnedAt).toBe(T4);
     });
   });
 

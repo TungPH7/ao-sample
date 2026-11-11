@@ -94,8 +94,8 @@ describe('Note pins (integration)', () => {
       expect(at).toBeLessThanOrEqual(Date.now());
     });
 
-    it('lists the pinned notes first, the latest pin on top, then the others newest first', async () => {
-      // AC2: pin A, then B; C and D are not pinned, D created after C.
+    it('lists the pinned notes first, the earliest pin on top and a later pin right below, then the others newest first', async () => {
+      // AC1 and AC2: pin A, then B; C and D are not pinned, D created after C.
       const a = await create('A');
       const b = await create('B');
       await create('C');
@@ -105,13 +105,13 @@ describe('Note pins (integration)', () => {
       const response = await pin(b.id).expect(200);
 
       expect(titles((response.body as { data: Note[] }).data)).toEqual([
-        'B',
         'A',
+        'B',
         'D',
         'C',
       ]);
-      expect(titles(await listed())).toEqual(['B', 'A', 'D', 'C']);
-      expect(pinnedTitles(await listed())).toEqual(['B', 'A']);
+      expect(titles(await listed())).toEqual(['A', 'B', 'D', 'C']);
+      expect(pinnedTitles(await listed())).toEqual(['A', 'B']);
     });
 
     it('keeps the id, title, content and createdAt of the note', async () => {
@@ -206,7 +206,7 @@ describe('Note pins (integration)', () => {
         expect(response.body).toStrictEqual(PINNED_LIMIT);
         const after = await listed();
         expect(after).toStrictEqual(before);
-        expect(pinnedTitles(after)).toEqual(['C', 'B', 'A']);
+        expect(pinnedTitles(after)).toEqual(['A', 'B', 'C']);
         expect(after.find(({ id }) => id === notes[3].id)?.pinnedAt).toBeNull();
       });
 
@@ -313,22 +313,32 @@ describe('Note pins (integration)', () => {
 
       expect(response.status).toBe(200);
       expect(pinnedTitles((response.body as { data: Note[] }).data)).toEqual([
-        'D',
-        'C',
         'A',
+        'C',
+        'D',
       ]);
     });
 
-    it('lets a note pinned again go back to the top', async () => {
+    it('puts a note pinned again at the bottom of the pinned notes, not back in its old place', async () => {
+      // Rules 4: pin A, B, then C; unpin A and pin it again.
       const a = await create('A');
       const b = await create('B');
+      const c = await create('C');
+      await create('D');
       await pin(a.id).expect(200);
       await pin(b.id).expect(200);
+      await pin(c.id).expect(200);
       await unpin(a.id).expect(200);
 
       const response = await pin(a.id).expect(200);
 
-      expect(titles((response.body as { data: Note[] }).data)).toEqual(['A', 'B']);
+      expect(titles((response.body as { data: Note[] }).data)).toEqual([
+        'B',
+        'C',
+        'A',
+        'D',
+      ]);
+      expect(pinnedTitles(await listed())).toEqual(['B', 'C', 'A']);
     });
 
     it('is idempotent: unpinning a note that is not pinned answers 200 and changes nothing', async () => {

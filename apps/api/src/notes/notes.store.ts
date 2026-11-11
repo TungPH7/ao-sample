@@ -67,11 +67,13 @@ export class NotesStore {
     return 'UNPINNED';
   }
 
-  // The pinned notes first, the latest pin on top; then the other notes, newest
-  // first by the order of adding rather than by createdAt, so two notes of the
-  // same millisecond keep their order. A copy: callers cannot change the store.
+  // The pinned notes first, the earliest pin on top and each later pin right
+  // below, so the top of the list stays put when a note is pinned (Rules 1 and 4
+  // of docs/specs/SMP-23/spec.md); then the other notes, newest first by the
+  // order of adding rather than by createdAt, so two notes of the same
+  // millisecond keep their order. A copy: callers cannot change the store.
   list(): Note[] {
-    const pinned = this.pinned.toReversed().map((id) => this.noteOf(id));
+    const pinned = this.pinned.map((id) => this.noteOf(id));
     const pinnedIds = new Set(this.pinned);
     const unpinned = this.notes.filter(({ id }) => !pinnedIds.has(id));
     return [...pinned, ...unpinned.toReversed()];
