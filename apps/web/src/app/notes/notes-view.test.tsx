@@ -127,7 +127,8 @@ describe('the state of the list', () => {
 
     expect(listedTitles()).toEqual(['A']);
     expect(skeleton()).toBeNull();
-    expect(screen.queryByRole('status')).toBeNull();
+    // The only status is the empty announcer of SMP-23 [S1.20], not the empty-list message.
+    expect(screen.getByRole('status').textContent).toBe('');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -181,7 +182,8 @@ describe('the state of the list', () => {
     await settle(api.posts()[0], json(note('n', 'Mua sữa'), 201));
 
     expect(listedTitles()).toEqual(['Mua sữa']);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(EMPTY)).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 });
 
