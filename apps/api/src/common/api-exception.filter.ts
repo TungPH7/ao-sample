@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiErrorBody,
   ApiErrorCode,
@@ -37,6 +37,21 @@ const CODES_BY_STATUS: Partial<Record<number, ApiErrorCode>> = {
   [HttpStatus.UNSUPPORTED_MEDIA_TYPE]: 'UNSUPPORTED_MEDIA_TYPE',
 };
 
+// Whether the path of the request, without its query, holds % codes that do not
+// decode to UTF-8, as %FF, %C3%28 or %ED%A0%80. Express decodes each path param
+// with decodeURIComponent and throws a URIError of status 400, which Nest turns
+// into a plain BadRequestException (docs/specs/SMP-23/spec.md, AC12).
+function pathDoesNotDecode(request: Request | undefined): boolean {
+  const url = request?.originalUrl ?? request?.url ?? '';
+  const path = url.split('?', 1)[0];
+  try {
+    decodeURIComponent(path);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 interface ApiErrorAnswer {
   status: number;
   body: ApiErrorBody;
@@ -63,11 +78,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(ApiExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const { status, body } = this.toAnswer(exception);
-    host.switchToHttp().getResponse<Response>().status(status).json(body);
+    const http = host.switchToHttp();
+    const { status, body } = this.toAnswer(
+      exception,
+      http.getRequest<Request>(),
+    );
+    http.getResponse<Response>().status(status).json(body);
   }
 
-  private toAnswer(exception: unknown): ApiErrorAnswer {
+  private toAnswer(exception: unknown, request: Request): ApiErrorAnswer {
     if (exception instanceof ValidationFailedException) {
       return answer(400, 'VALIDATION_FAILED', exception.fields);
     }
@@ -79,6 +98,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
+      // A path that does not decode names no resource: an id that is not UTF-8
+      // is an unknown id, as the API Contract of docs/specs/SMP-23/plan.md says.
+      if (status === HttpStatus.BAD_REQUEST && pathDoesNotDecode(request)) {
+        return answer(HttpStatus.NOT_FOUND, 'NOT_FOUND');
+      }
       const code = CODES_BY_STATUS[status];
       if (code) {
         return answer(status, code);

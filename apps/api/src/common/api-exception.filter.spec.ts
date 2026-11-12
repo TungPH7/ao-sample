@@ -31,8 +31,8 @@ interface RecordedResponse {
 }
 
 // An Express-like response that records what the filter answers, inside the
-// ArgumentsHost of an HTTP request whose body holds the marker.
-function catchWithFilter(exception: unknown): RecordedResponse {
+// ArgumentsHost of an HTTP request to `url` whose body holds the marker.
+function catchWithFilter(exception: unknown, url = '/notes'): RecordedResponse {
   const recorded: RecordedResponse = {};
   const response = {
     status(code: number) {
@@ -46,7 +46,8 @@ function catchWithFilter(exception: unknown): RecordedResponse {
   };
   const request = {
     method: 'POST',
-    url: '/notes',
+    url,
+    originalUrl: url,
     body: { title: BODY_MARKER },
   };
   const host = {
@@ -168,6 +169,95 @@ describe('ApiExceptionFilter', () => {
 
       expect(JSON.stringify(answer.body)).not.toContain(BODY_MARKER);
     });
+  });
+
+  describe('400 of a path that does not decode (AC12)', () => {
+    // What Nest makes of the URIError Express throws when it decodes a path
+    // param: a BadRequestException with the message of Express.
+    function decodeFailure(param: string): BadRequestException {
+      return new BadRequestException(`Failed to decode param '${param}'`);
+    }
+
+    it.each([
+      ['%FF', 'PUT'],
+      ['%C3%28', 'PUT'],
+      ['%ED%A0%80', 'PUT'],
+      ['%FF', 'DELETE'],
+      ['%C3%28', 'DELETE'],
+      ['%ED%A0%80', 'DELETE'],
+    ])(
+      'answers 404 NOT_FOUND for the id %s, which is not UTF-8, on %s /notes/:id/pin',
+      (id) => {
+        const answer = catchWithFilter(decodeFailure(id), `/notes/${id}/pin`);
+
+        expect(answer.statusCode).toBe(404);
+        expect(answer.body).toStrictEqual({
+          error: { code: 'NOT_FOUND', message: 'Resource not found.' },
+        });
+      },
+    );
+
+    it('answers 404 NOT_FOUND for a path that does not decode whatever the message', () => {
+      const answer = catchWithFilter(
+        new BadRequestException(),
+        '/notes/%FF/pin',
+      );
+
+      expect(answer.statusCode).toBe(404);
+    });
+
+    it('never repeats the id of the path', () => {
+      const answer = catchWithFilter(decodeFailure('%FF'), '/notes/%FF/pin');
+
+      expect(JSON.stringify(answer.body)).not.toContain('%FF');
+    });
+
+    it('does not log', () => {
+      catchWithFilter(decodeFailure('%FF'), '/notes/%FF/pin');
+
+      expect(logError).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an id that decodes', '/notes/%C3%A9/pin'],
+      ['a query that does not decode', '/notes?x=%FF'],
+    ])('keeps 400 INVALID_BODY for %s', (_name, url) => {
+      const answer = catchWithFilter(new BadRequestException(), url);
+
+      expect(answer.statusCode).toBe(400);
+      expect(answer.body).toStrictEqual({
+        error: {
+          code: 'INVALID_BODY',
+          message: 'Request body must be a JSON object.',
+        },
+      });
+    });
+
+    it('keeps 400 VALIDATION_FAILED for a path that does not decode', () => {
+      const fields: FieldError[] = [{ field: 'title', code: 'REQUIRED' }];
+
+      const answer = catchWithFilter(
+        new ValidationFailedException(fields),
+        '/notes/%FF',
+      );
+
+      expect(answer.statusCode).toBe(400);
+      expect(answer.body).toMatchObject({
+        error: { code: 'VALIDATION_FAILED' },
+      });
+    });
+
+    it.each([
+      ['413', new PayloadTooLargeException(), 413],
+      ['415', new UnsupportedMediaTypeException(), 415],
+    ])(
+      'keeps the status of a %s on a path that does not decode',
+      (_name, exception, status) => {
+        const answer = catchWithFilter(exception, '/notes/%FF/pin');
+
+        expect(answer.statusCode).toBe(status);
+      },
+    );
   });
 
   describe('404 HttpException', () => {

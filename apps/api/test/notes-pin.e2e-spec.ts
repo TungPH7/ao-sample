@@ -383,6 +383,102 @@ describe('Note pins (integration)', () => {
     });
   });
 
+  describe('an id whose % codes do not decode to UTF-8 (AC12)', () => {
+    // Pinned A, then B; C is not pinned. The % codes are well formed: a % and
+    // two hex digits. Malformed ones, as %ZZ, are out of the Story.
+    async function pinnedAndUnpinned(): Promise<Note[]> {
+      const a = await create('A');
+      const b = await create('B');
+      await create('C');
+      await pin(a.id).expect(200);
+      await pin(b.id).expect(200);
+      return listed();
+    }
+
+    const NOT_UTF8 = [
+      ['a lone byte above 0x7F', '%FF'],
+      ['a lead byte without its continuation', '%C3%28'],
+      ['a UTF-16 surrogate', '%ED%A0%80'],
+    ];
+    const UNKNOWN_WELL_FORMED = [
+      ['an unknown id', 'no-such-id'],
+      ['an unknown id that decodes to é', '%C3%A9'],
+    ];
+
+    describe.each([
+      ['PUT', pin],
+      ['DELETE', unpin],
+    ])('%s /notes/:id/pin', (_method, send) => {
+      it.each(NOT_UTF8)(
+        'answers 404 NOT_FOUND for %s (%s) and changes no note',
+        async (_name, id) => {
+          const before = await pinnedAndUnpinned();
+
+          const response = await send(id);
+
+          expect(response.status).toBe(404);
+          expect(response.headers['content-type']).toMatch(
+            /^application\/json/,
+          );
+          expect(response.body).toStrictEqual(NOT_FOUND);
+          expect(await listed()).toStrictEqual(before);
+          expect(pinnedTitles(await listed())).toEqual(['A', 'B']);
+        },
+      );
+
+      it.each(UNKNOWN_WELL_FORMED)(
+        'answers the same 404 NOT_FOUND for %s (%s)',
+        async (_name, id) => {
+          const before = await pinnedAndUnpinned();
+
+          const response = await send(id);
+
+          expect(response.status).toBe(404);
+          expect(response.body).toStrictEqual(NOT_FOUND);
+          expect(await listed()).toStrictEqual(before);
+        },
+      );
+
+      it('answers 404 NOT_FOUND for an id that does not decode, even with a JSON body', async () => {
+        const before = await pinnedAndUnpinned();
+
+        const response = await send('%FF')
+          .set('Content-Type', 'application/json')
+          .send(JSON.stringify({ pinnedAt: '2000-01-01T00:00:00.000Z' }));
+
+        expect(response.status).toBe(404);
+        expect(response.body).toStrictEqual(NOT_FOUND);
+        expect(await listed()).toStrictEqual(before);
+      });
+    });
+
+    it('changes no note after every one of them, in the order of the QA check', async () => {
+      const before = await pinnedAndUnpinned();
+
+      for (const [, id] of [...NOT_UTF8, ...UNKNOWN_WELL_FORMED]) {
+        await pin(id).expect(404);
+        await unpin(id).expect(404);
+      }
+
+      expect(await listed()).toStrictEqual(before);
+    });
+
+    it('still answers 400 INVALID_BODY for a broken JSON body on POST /notes', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/notes')
+        .set('Content-Type', 'application/json')
+        .send('{"title": ');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toStrictEqual({
+        error: {
+          code: 'INVALID_BODY',
+          message: 'Request body must be a JSON object.',
+        },
+      });
+    });
+  });
+
   describe('other methods on /notes/:id/pin', () => {
     it.each([
       ['GET', (id: string) => request(app.getHttpServer()).get(`/notes/${id}/pin`)],
