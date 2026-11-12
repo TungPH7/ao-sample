@@ -74,6 +74,9 @@ Danh sách ghi chú xếp mới nhất lên đầu (SPEC của SMP-2), nên mỗ
 - AC9: Given đã có 3 ghi chú được ghim và nút Ghim của B đang khóa, When bỏ ghim một trong 3 ghi chú đó, Then nút Ghim của B mở lại và dòng nhắc biến mất, không cần tải lại trang.
 - AC10: Given trang đang hiện ít hơn 3 ghi chú được ghim, nhưng ở API đã đủ 3 vì có người vừa ghim từ trình duyệt khác, When bấm Ghim ở B, Then B vẫn chưa ghim, danh sách tự tải lại và hiện đủ 3 ghi chú đã ghim ở đầu, và nút Ghim của B bị khóa, kèm dòng nhắc như AC8.
 - AC11: Given đã có 3 ghi chú được ghim, When một yêu cầu ghim một ghi chú khác gửi thẳng tới API, không qua giao diện, Then API trả lỗi 409, và không ghi chú nào đổi trạng thái: danh sách API trả về vẫn có đúng 3 ghi chú được ghim, và ghi chú vừa bị từ chối vẫn chưa ghim.
+- AC12: Given có ghi chú đã ghim và ghi chú chưa ghim, When một yêu cầu ghim (`PUT`) hoặc bỏ ghim (`DELETE`) gửi thẳng tới API, không qua giao diện, với `id` có mã `%` đúng cú pháp (dấu `%` và hai chữ số hex) nhưng không giải mã ra chuỗi UTF-8 hợp lệ, như `%FF`, `%C3%28` hay `%ED%A0%80`, Then API trả lỗi 404 `NOT_FOUND`, như với một `id` lạ đúng dạng (`no-such-id`, `%C3%A9`), và không ghi chú nào đổi trạng thái: danh sách API trả về sau đó vẫn có đúng những ghi chú được ghim như trước, theo đúng thứ tự cũ.
+
+AC12 chỉ nói về mã `%` đúng cú pháp. Mã `%` sai cú pháp, như `%ZZ`, bị proxy của Development chặn bằng 400 trước khi tới ứng dụng: phần đó nằm ngoài Story này.
 
 ### Changes to SMP-2
 
@@ -159,7 +162,7 @@ apps/api/src/common/                → mã lỗi mới cho giới hạn ghim (A
 apps/api/test/                      → integration test của việc ghim
 apps/web/next.config.ts             → rewrite cho đường ghim (ADR-0002)
 apps/web/src/app/notes/             → nút Ghim và Bỏ ghim, dấu Đã ghim, dòng nhắc, lỗi của từng ghi chú, thứ tự danh sách; test *.test.tsx cạnh file
-e2e/notes-pin/                      → E2E của SMP-23, một test cho mỗi tiêu chí AC1–AC11
+e2e/notes-pin/                      → E2E của SMP-23, một test cho mỗi tiêu chí AC1–AC12
 e2e/notes/create-note.spec.ts       → sửa E2E AC1, AC2 của SMP-2 theo mục Changes to SMP-2
 docs/specs/SMP-23/                  → spec.md, design.md, plan.md của Epic
 ```
@@ -193,10 +196,11 @@ test('AC1 pins a note to the top of the list without reloading the page', async 
   - Ở web: thứ tự sau khi ghim và bỏ ghim; khóa và mở nút ở 3; dòng nhắc; lỗi riêng của từng ghi chú và lúc nó mất; bấm đôi; focus sau khi ghi chú đổi chỗ.
 - **Integration, viết theo TDD cho mỗi Story:**
   - API qua supertest: ghim, bỏ ghim, 409 ở ghi chú thứ tư, 404 với `id` lạ, idempotent, thứ tự và trạng thái ghim trong `GET`, method hay `Content-Type` mà form HTML gửi được bị từ chối.
+  - `id` có mã `%` đúng cú pháp nhưng không giải mã ra UTF-8 hợp lệ (`%FF`, `%C3%28`, `%ED%A0%80`), ở cả `PUT` và `DELETE`: 404 `NOT_FOUND` như `id` lạ đúng dạng, không phải 400 `INVALID_BODY`, và `GET` sau đó có đúng những ghi chú được ghim như trước, cùng thứ tự (AC12).
   - Nhiều yêu cầu ghim cùng lúc (`Promise.all`) khi đã có 2 ghi chú được ghim: đúng một yêu cầu thành công, các yêu cầu còn lại nhận 409.
   - Thời gian trả lời với 1000 ghi chú, theo bảng Hiệu năng.
   - Web với Testing Library, API được giả lập: số yêu cầu, quá giờ, phân biệt 409 với lỗi khác.
-- **E2E** (Playwright, `e2e/notes-pin/`): một test cho mỗi tiêu chí AC1–AC11, tên bắt đầu bằng mã tiêu chí. AC2 mở trang ở một browser context mới để giả một trình duyệt khác. AC11 gửi yêu cầu thẳng tới API bằng `request`, như AC9 của SMP-2.
+- **E2E** (Playwright, `e2e/notes-pin/`): một test cho mỗi tiêu chí AC1–AC12, tên bắt đầu bằng mã tiêu chí. AC2 mở trang ở một browser context mới để giả một trình duyệt khác. AC11 và AC12 gửi yêu cầu thẳng tới API bằng `request`, như AC9 của SMP-2.
 - **Trạng thái ghim dùng chung khi chạy E2E**, khó hơn ở SMP-2. Playwright chạy song song trên một tiến trình API. Trạng thái ghim là chung cho cả kho, và còn lại giữa các lần chạy trên Development cho tới lần deploy sau. Vì vậy:
   - Test cần biết chính xác số ghi chú được ghim (AC8, AC9, AC10) giả lập câu trả lời của API bằng `page.route`, như SMP-2 làm cho AC7, AC8, AC10, AC13.
   - Test ghim ghi chú thật (AC1–AC7) nằm chung một file chạy tuần tự, và bỏ ghim những gì mình ghim, theo mục Code Style.
@@ -228,7 +232,7 @@ test('AC1 pins a note to the top of the list without reloading the page', async 
 
 ## Success Criteria
 
-- Story "Ghim và bỏ ghim" ở trên đạt DoD, và E2E của từng tiêu chí AC1–AC11 đều pass trên môi trường Development.
+- Story "Ghim và bỏ ghim" ở trên đạt DoD, và E2E của từng tiêu chí AC1–AC12 đều pass trên môi trường Development.
 - Không chuỗi yêu cầu nào, qua giao diện hay gửi thẳng tới API, kể cả gửi cùng lúc, làm cho có hơn 3 ghi chú được ghim.
 - Trạng thái ghim giống nhau ở mọi trình duyệt, và còn nguyên sau khi tải lại trang, cho tới khi API khởi động lại.
 - Mỗi chữ ở mục Rules hiện đúng nguyên văn, đúng chỗ, và đọc được bằng trình đọc màn hình.

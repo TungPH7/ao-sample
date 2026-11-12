@@ -18,8 +18,8 @@ import {
   type StoredNote,
 } from './pin-helpers';
 
-// AC1–AC7 and AC11 of SMP-23: every test here pins real notes. Pins are shared by the whole store, so the tests of this
-// file run one after the other in one worker (plan, decision 12); not `serial`, which skips every test after a
+// AC1–AC7, AC11 and AC12 of SMP-23: every test here pins real notes. Pins are shared by the whole store, so the tests of
+// this file run one after the other in one worker (plan, decision 12); not `serial`, which skips every test after a
 // failed one. Each test unpins, in `finally`, exactly the notes it pinned.
 test.describe.configure({ mode: 'default' });
 
@@ -314,3 +314,45 @@ test('AC11 refuses a pin sent straight to the API once 3 notes are pinned, and c
     await unpinAll(request, pinned);
   }
 });
+
+// AC12: ids whose % codes are well formed but do not decode to UTF-8, sent as they are, never through encodeURIComponent.
+// Malformed codes such as %ZZ are out of scope: the proxy of Development answers them 400 before the app.
+const NOT_FOUND = { error: { code: 'NOT_FOUND', message: 'Resource not found.' } };
+
+for (const [name, id] of [
+  ['a lone byte above 0x7F', '%FF'],
+  ['a lead byte followed by a byte that cannot continue it', '%C3%28'],
+  ['an encoded UTF-16 surrogate', '%ED%A0%80'],
+  ['an unknown id of the right form', 'no-such-id'],
+  ['an unknown id that decodes to UTF-8', '%C3%A9'],
+] as const) {
+  test(`AC12 answers 404 NOT_FOUND to a pin and an unpin of ${id}, ${name}, sent straight to the API, and changes no note`, async ({
+    request,
+  }) => {
+    const a = await createNote(request, { title: uniqueTitle('AC12 A') });
+    const b = await createNote(request, { title: uniqueTitle('AC12 B') });
+    const c = await createNote(request, { title: uniqueTitle('AC12 C') });
+    const pinned: StoredNote[] = [];
+    try {
+      await pinNote(request, a.id);
+      pinned.push(a);
+      await pinNote(request, b.id);
+      pinned.push(b);
+      const pinnedBefore = (await storedNotes(request)).filter((note) => note.pinnedAt !== null);
+
+      const put = await request.put(`/api/notes/${id}/pin`);
+      expect(put.status(), `PUT ${id}`).toBe(404);
+      expect(await put.json()).toEqual(NOT_FOUND);
+      const del = await request.delete(`/api/notes/${id}/pin`);
+      expect(del.status(), `DELETE ${id}`).toBe(404);
+      expect(await del.json()).toEqual(NOT_FOUND);
+
+      // The same pinned notes, in the same order, pinned at the same time; C is still unpinned.
+      const stored = await storedNotes(request);
+      expect(stored.filter((note) => note.pinnedAt !== null)).toEqual(pinnedBefore);
+      expect(stored.find((note) => note.id === c.id)?.pinnedAt).toBeNull();
+    } finally {
+      await unpinAll(request, pinned);
+    }
+  });
+}
