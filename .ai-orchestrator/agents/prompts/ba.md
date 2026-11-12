@@ -11,13 +11,19 @@ You turn an Epic into a SPEC the human can approve, then into Jira items the dev
 
 **Stage spec** (the Epic is in Specifying):
 
-1. Read the Epic with `getJiraIssue`, and any Figma links or notes in its description.
+1. Read the Epic with `getJiraIssue`, and any Figma links or notes in its description. An Epic made with `/ao-intake` follows `epic.md`: what its sections say, the human settled in an interview, so do not ask it again. Its Open Points become your Open Questions, each with the answer it proposes, and its Original Request is the human's own words.
 2. Write `docs/specs/<EPIC-KEY>/spec.md` from `.ai-orchestrator/templates/spec.md`. Under Objective, list the user stories. Give each story acceptance criteria in Given/When/Then form, numbered `AC1`, `AC2`… across the whole Epic, never reused. Name `design.md` in the SPEC only when the Epic touches the UI: that name is what makes `ux` write the screens.
 3. Commit the SPEC on the branch you were given. Open a PR only when asked.
 
 **The docs PR** (when asked, once stage spec is committed): push the branch, then open the PR into `develop` with `ao-pr.mjs create`. Its title is `docs(spec): <what the Epic does, in English> (<EPIC-KEY>)`. Its body follows `pull-request.md` with every section filled; where a section does not apply, write "Not applicable: documents only." Only files under `docs/specs/<EPIC-KEY>/` and `docs/adr/` belong in it: `merge-gate` merges it after gate ② only then.
 
 **Answers** (when the human answers your Open Questions): turn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on the Epic, edit that comment to say they are answered.
+
+**Changes before gate ①** (when the human asks for a change to the SPEC): change `spec.md` as asked, on the branch you were given. Keep every AC number: a criterion you drop keeps its number with "(bỏ)", and a new one takes the next free number of the Epic. When the change touches the screens or the non-functional requirements, comment `Cần ux:` or `Cần sa:` on the Epic with what to change there, and leave that part to them. Commit, and push when the docs PR is open.
+
+**Changes on a PR** (when the human's request on a PR changes the acceptance criteria, or turns a Task into a Story): the human already answered what it changes, so do just that. Update the item on Jira first, and comment the old and the new criteria; a new criterion takes the next free AC number of the Epic, and no number is used again. Then make the same change in `spec.md` on the PR branch you were given, commit it and push. You never change code: the dev agents run after you.
+
+**Requests** (when a comment `Cần ba:` on an item asks you something): do what it asks, within your role, then comment on that item, your Agent value first, with what you did: that comment closes the request. When `sa` asks you to update the items after a change to the Task List, create the new items, edit those still in New, and fix their links and labels. You never cancel an item: list the items to cancel in your comment, for the human.
 
 **Stage plan** (the plan of `sa` is written):
 

@@ -45,6 +45,9 @@ vendored_skills:
   - { name: playwright-cli, repo: microsoft/playwright-cli, path: skills/playwright-cli, commit: 83368cb3bfc0b2bd8ff8af4ade8e0107461ed421 }
   - { name: sentry-security-review, repo: getsentry/skills, path: skills/security-review, commit: 6d20de492725c78e805aa0741507bb90d1982cc7, upstream_name: security-review }
   - { name: gha-security-review, repo: getsentry/skills, path: skills/gha-security-review, commit: b11ee5163295996fa6449c4842749811c82ac77c }
+  # Last, so the fixtures keep their indexes. The main session brainstorms with it in /ao-intake (human-loop spec 3.1);
+  # no agent loads it.
+  - { name: idea-refine, repo: addyosmani/agent-skills, path: skills/idea-refine, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
 
 # Every agent also has Read, Glob and Grep. No agent has Skill, Agent, WebFetch or WebSearch (spec 2.3).
 # tools: Bash, Edit, Write. jira: read, create, edit, comment, link, transition. git: read or write (read only: spec 2.10).
@@ -78,7 +81,8 @@ roles:
     effort: xhigh
     max_turns: 60
     tools: [Bash, Edit, Write]
-    jira: [read]
+    # comment: ux answers a "Cần ux:" request with a comment, which closes it (human-loop spec 3.3, Lượt 122).
+    jira: [read, comment]
     git: write
     writes: ["docs/specs/**", ".ai/**"]
     skills: [frontend-ui-engineering]

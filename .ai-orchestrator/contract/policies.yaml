@@ -88,6 +88,13 @@ artifacts:
     created_by: [sa]
     stored_in:
       - { place: git, path: "docs/adr/NNNN-<slug>.md" }
+  # human-loop spec 3.1: /ao-intake writes it in your session, from its interview with you.
+  - id: epic
+    name: "Epic"
+    template: templates/epic.md
+    created_by: [human]
+    stored_in:
+      - { place: tracker, note: "Mô tả item" }
   - id: story
     name: "Story"
     template: templates/story.md

@@ -1,7 +1,7 @@
 // What gh-guard refuses to agents (quality-gates spec section 2.7): skipping the git hooks, pushing to a protected
 // branch, working on a PR or writing through the GitHub API with your account, taking your token or an App key,
-// changing the repository settings or deleting its workflow runs, running ao-pr.mjs with the other role's App, and
-// editing protected paths. With the roster, also the role rules of agent-roster spec 2.10 (lib/agents/scope.mjs):
+// changing the repository settings or deleting its workflow runs, running ao-pr.mjs with the other role's App,
+// putting the basic auth password of Development and Staging on a command line, and editing protected paths. With the roster, also the role rules of agent-roster spec 2.10 (lib/agents/scope.mjs):
 // files outside the role's paths, and git commands that change the checkout for read-only roles. Pure.
 // Commands are read the way a shell splits them, with the script of sh -c and eval, the command after a wrapper such as
 // env or timeout, and any git or gh further on: good enough for what agents write, not proof against a determined one.
@@ -87,6 +87,11 @@ const WRAPPERS = {
   timeout: ['-s', '--signal', '-k', '--kill-after'],
 };
 const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+// The basic auth password ao-step gives qa in its environment (release-workflow spec 2.5), named in a word of a command
+// the way bash, PowerShell or cmd expand it. Any process on the machine can read a command line, so the password goes
+// to curl on stdin: printf, a builtin of the shell, prints it into the pipe (Pilot 2, T6: qa ran curl -u).
+const PASSWORD_REFERENCE = /\$(?:\{|env:)?(?:E2E_HTTP_PASSWORD|AO_ENV_AUTH)\b|%(?:E2E_HTTP_PASSWORD|AO_ENV_AUTH)%/i;
+const PASSWORD = 'do not put the basic auth password on a command line, where any process can read it: give it to curl on stdin, as in printf \'user = "%s:%s"\\n\' "$E2E_HTTP_USER" "$E2E_HTTP_PASSWORD" | curl -K - <url>';
 // Windows reads program names in any letter case.
 const programOf = (word) => word?.split(/[\\/]/).at(-1).replace(/\.exe$/i, '').toLowerCase();
 const nested = (script, role, gates, roster, depth) => (depth < 5 ? checkCommand(script, role, gates, roster, depth + 1) : deny('too many nested shells'));
@@ -139,6 +144,8 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
     if (program === 'timeout') i++;
     return i < words.length ? checkWords(words.slice(i), role, gates, roster, depth, [...env, ...assignments]) : allow;
   }
+  // Only the builtin itself: /usr/bin/printf is a process of its own.
+  if (words[0] !== 'printf' && words.slice(1).some((word) => PASSWORD_REFERENCE.test(word))) return deny(PASSWORD);
   if (program === 'git' && env.some((assignment) => /^GIT_CONFIG/.test(assignment))) return deny(HOOKS);
   const result = program === 'git' ? checkGit(words, gates) : program === 'gh' ? checkGh(words) : (checkOrchestration(words) ?? checkAoPr(words, role, gates));
   if (!result.allow) return result;

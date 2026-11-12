@@ -71,6 +71,15 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     if (next.action) {
       log(`${next.action} ${next.key}`);
       made.push({ action: next.action, key: next.key, notes: await act(next) });
+      // An action with `continue` is a first step, such as marking a draft PR ready before its review (human-loop spec
+      // 4.6): the command goes on with what is decided after it, once GitHub shows its effect. Any other action is the
+      // one step of its command.
+      if (next.continue) {
+        const again = (d) => d.go && d.runs[0]?.action === next.action;
+        ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined }), (d) => !again(d), limits.syncWaitMs, { sleep, now, limits }));
+        if (again(decision)) reason = `${next.action} ran on ${next.key}, but the facts still ask for it after ${Math.round(limits.syncWaitMs / 60000)} minutes: run the command again`;
+        continue;
+      }
       facts = await gather();
       decision = decide(command, facts, { ...options, answers: undefined, note: undefined });
       break;
@@ -117,6 +126,10 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       ...(next.checkout && { checkout: next.checkout }),
       ...(next.head && { head: next.head }),
       ...(next.note && { note: next.note }),
+      // The time of the request a run of /ao-request answers (human-loop spec 3.3).
+      ...(next.request && { request: next.request }),
+      // The QA report a rebuild after QA fail answers (human-loop spec 5.2).
+      ...(next.rebuild && { rebuild: next.rebuild }),
       // The release a qa run tested: /ao-ship checks its regression still holds for the head (release-workflow T15).
       ...(next.qa && { qa: { environment: next.qa.environment, sha: next.qa.sha } }),
     };
@@ -179,7 +192,8 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
   return { decision: final, made, facts };
 }
 
-const same = (a, b) => a.role === b.role && a.purpose === b.purpose && a.key === b.key && !b.resume;
+// Two requests to one role are two runs (human-loop spec 3.3): `request` is the time of the comment.
+const same = (a, b) => a.role === b.role && a.purpose === b.purpose && a.key === b.key && a.request === b.request && !b.resume;
 
 const ciPending = (facts) => Boolean((facts.pr?.state === 'open' && facts.pr.ci.pending) || (facts.docs?.pr?.state === 'open' && facts.docs.pr.ci.pending));
 // The open PR whose head has no check run or status yet; null when CI started everywhere.

@@ -27,8 +27,13 @@ function form(page: Page) {
   };
 }
 
+// The first note that is not pinned (SPEC of SMP-23, Changes to SMP-2): a new note goes right below the pinned ones.
 function firstNote(page: Page) {
-  return page.getByRole('list').getByRole('listitem').first();
+  return page
+    .getByRole('list')
+    .getByRole('listitem')
+    .filter({ hasNot: page.getByText('Đã ghim', { exact: true }) })
+    .first();
 }
 
 // Answers every request to /api/notes except POST, which `onPost` handles.
@@ -73,9 +78,11 @@ test('AC2 saves a note with an empty content and shows it first in the list', as
 
   const first = firstNote(page);
   await expect(first.getByRole('heading', { level: 3 })).toHaveText(title);
-  // design.md S1.14: with an empty content, the item has only its title [12] and its creation time [13].
+  // design.md S1.14: with an empty content, the item has only its title [12] and its creation time [13], then the pin
+  // button of SMP-23 [17] in the last child.
   await expect(first.locator('p')).toHaveCount(0);
-  await expect(first).toHaveText(title + (await first.locator('time').textContent()));
+  await expect(first.locator(':scope > *')).toHaveCount(2);
+  await expect(first.locator(':scope > *').first()).toHaveText(title + (await first.locator('time').textContent()));
   expect(await storedWithTitle(request, title)).toEqual([expect.objectContaining({ content: '' })]);
 });
 

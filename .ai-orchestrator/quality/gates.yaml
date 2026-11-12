@@ -110,8 +110,9 @@ security_review:
   lower_effort: high
 
 # A PR that copies a kit another project reviewed in full (kit-copy-review spec 2.2, 2.3): ao-step compares it with the
-# reviewed head and writes both reports, with no agent. A project's own files, such as .claude/settings.json and
-# .ai-orchestrator/deploy.yaml, are in none of these lists, so a PR that changes one is reviewed as usual.
+# reviewed head and writes both reports, with no agent. A project's own files, such as .claude/settings.json,
+# .ai-orchestrator/deploy.yaml and .ai-orchestrator/preview.yaml (human-loop spec 4.3), are in none of these lists, so a
+# PR that changes one is reviewed as usual.
 kit_copy:
   # The same in every project, compared both ways.
   same:

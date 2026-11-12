@@ -276,7 +276,7 @@ Quy trình chạy theo Kanban: agent kéo item ready kế tiếp khi còn chỗ 
 ### Release
 
 - **Release theo quyết định của bạn, không theo lịch cố định.** Bạn cắt release khi thấy đủ giá trị để đưa lên, ví dụ khi mọi Story của một Epic đã Done, hoặc khi khách cần sớm một tính năng. Lúc lên Production cũng do bạn quyết ở cổng ⑤.
-- **Điểm cắt.** develop nhận merge liên tục, nên lúc bạn muốn release thường vẫn còn item đã merge nhưng chưa Done. Vì vậy nhánh release tách từ điểm cắt, không từ commit mới nhất của develop. Điểm cắt là commit mới nhất trên lịch sử develop sao cho mọi item có commit tính tới điểm đó đều đã Done, và không item nào trong số đó còn commit nằm sau điểm cắt. Key của Epic không tính: Epic không được release, item con của nó mới được, nên commit tài liệu của Epic đi theo điểm cắt chứa nó. Item nằm sau điểm cắt vào bản kế tiếp. release-workflow tính điểm cắt và đưa bạn danh sách item để duyệt ở cổng ④.
+- **Điểm cắt.** develop nhận merge liên tục, nên lúc bạn muốn release thường vẫn còn item đã merge nhưng chưa Done. Vì vậy nhánh release tách từ điểm cắt, không từ commit mới nhất của develop. Điểm cắt là commit mới nhất trên lịch sử develop sao cho mọi item có commit tính tới điểm đó đều đã Done, và không item nào trong số đó còn commit nằm sau điểm cắt. Key của Epic không tính: Epic không được release, item con của nó mới được, nên commit tài liệu của Epic đi theo điểm cắt chứa nó. Item Cancelled cũng không tính: Cancelled là trạng thái cuối, nên một item bị hủy sau khi đã merge sẽ chặn điểm cắt mãi. Code của nó đi theo điểm cắt chứa nó mà không nhận Fix Version, và danh sách ở cổng ④ ghi riêng các item đó; code nào không được lên thì revert trên develop trước khi cắt. Item nằm sau điểm cắt vào bản kế tiếp. release-workflow tính điểm cắt và đưa bạn danh sách item để duyệt ở cổng ④.
 - **Mỗi lúc chỉ có một nhánh release/* mở.** Muốn cắt bản mới thì bản đang ở Staging phải lên Production xong trước.
 - **Fix Version.** Luôn có sẵn một Fix Version chưa phát hành làm "bản kế tiếp", vì Bug Medium/Low được gắn vào đó ngay khi triage (mục 2.6). Khi cắt release, Fix Version này được gán cho các item trong điểm cắt; item nằm sau điểm cắt chuyển sang một Fix Version kế tiếp mới. Mô tả Fix Version ghi mục tiêu của bản để báo khách; mục tiêu là dự báo, không phải cam kết.
 
@@ -326,6 +326,7 @@ Giới hạn mặc định, chỉnh được ở retro:
 | Thiết kế màn hình | `templates/design.md` | `ux` | Git: `docs/specs/<EPIC-KEY>/design.md`; Git: `docs/specs/<EPIC-KEY>/design/`, ảnh của màn hình kiểu Figma |
 | Plan | `templates/plan.md` | `sa` | Git: `docs/specs/<EPIC-KEY>/plan.md` |
 | ADR | `templates/adr.md` | `sa` | Git: `docs/adr/NNNN-<slug>.md` |
+| Epic | `templates/epic.md` | `human` | Jira: Mô tả item |
 | Story | `templates/story.md` | `ba` | Jira: Mô tả item |
 | Task | `templates/task.md` | `ba` | Jira: Mô tả item |
 | Bug | `templates/bug.md` | Người báo lỗi | Jira: Mô tả item |
