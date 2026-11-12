@@ -12,14 +12,18 @@
 //                                 its head; qa: the release that runs, with its packages); add resolves { ok, path,
 //                                 reason }, remove { ok, reason } (optional)
 //   after(run, { tree, facts })   what ao-step does once a run ends and before its worktree goes (qa: the evidence to
-//                                 Jira); resolves notes for state.json and last.md (optional)
+//                                 Jira); run carries its startedAt; resolves notes for state.json and last.md (optional)
 //   act(step)                     a script step of a release command, such as cutting the release branch; resolves notes
 //                                 for last.md. It is the one step of its command (optional)
+//   wip                           { save(run), restore(wip) } (lib/workflow/wip.mjs): save puts aside the work a run left
+//                                 uncommitted when it stopped before its end, resolving { stash, branch }, null, or
+//                                 { error }; restore applies it again before the run goes on in its session, resolving
+//                                 { ok, notes } or { ok: false, reason } (optional; live-run-fixes spec 2.1)
 //   store                         { readState(key), writeState(key, state), writeLast(key, text) }; a run is written when it
 //                                 starts and again when it ends
 //   sleep(ms), now(), log(line)
 // Agents run one after another, never two at once.
-import { packNote, qaWorktreeNote, worktreeNote } from './prompts.mjs';
+import { packNote, qaWorktreeNote, wipNote, worktreeNote } from './prompts.mjs';
 import { readRun } from './runs.mjs';
 import { decideStep } from './steps.mjs';
 
@@ -45,7 +49,7 @@ export function agentCommand(run, kitDir) {
   };
 }
 
-export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, worktree, after, act, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
+export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, worktree, after, act, wip, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
   const limits = { ...LIMITS, ...given };
   let facts = await gather();
   let decision = decide(command, facts, options);
@@ -100,6 +104,18 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     const n = (state.runs.at(-1)?.n ?? 0) + 1;
     const logName = `${n}-${next.role}.jsonl`;
     const resumed = next.resume ? state.runs.findLast((r) => r.session === next.resume) : undefined;
+    // The work the run left uncommitted comes back first, once the checkout is on its branch; or nothing runs.
+    let restored = false;
+    let wipNotes = [];
+    if (resumed?.wip && wip) {
+      const back = await wip.restore(resumed.wip);
+      if (!back.ok) {
+        reason = back.reason;
+        break;
+      }
+      restored = true;
+      wipNotes = back.notes ?? [];
+    }
     log(`${n}. ${next.role} ${next.key} ${next.purpose}, effort ${next.effort}${next.resume ? ', resumes its session' : ''}`);
     const startedAt = new Date(now()).toISOString();
     // A review starts from the context pack of its PR (Pilot 1, review cost, option 2), written from the facts it was
@@ -112,7 +128,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       break;
     }
     const treeNote = tree && (next.worktree.kind === 'qa' ? qaWorktreeNote : worktreeNote)(tree.path, next.worktree.sha);
-    const notes = [file && packNote(file), treeNote].filter(Boolean);
+    const notes = [file && packNote(file), treeNote, restored && wipNote].filter(Boolean);
     const run = {
       n,
       command,
@@ -141,7 +157,8 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     let runNotes = [];
     try {
       ({ lines, stopped } = await agent(notes.length > 0 ? { ...next, prompt: [next.prompt, ...notes].join('\n\n') } : next, { log: logName }));
-      if (after) runNotes = await after(next, { tree, facts });
+      // With the start of the run: qa attaches only what it wrote since (live-run-fixes spec 2.5).
+      if (after) runNotes = await after({ ...next, startedAt }, { tree, facts });
     } finally {
       if (tree) {
         const removed = await worktree.remove(next.worktree);
@@ -162,20 +179,32 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       denials: read.denials.length,
       endedAt: new Date(now()).toISOString(),
       ...(stopped && { stoppedAfterResult: true }),
-      ...(runNotes.length > 0 && { notes: runNotes }),
+      ...(wipNotes.length + runNotes.length > 0 && { notes: [...wipNotes, ...runNotes] }),
       text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,
     };
     // state.json is written before anything else, so a stopped shell can go on from here.
     store.writeState(key, { ...state, runs: [...state.runs, record] });
+    // A run that stopped before its end may leave work not committed, which keeps the next command from switching the
+    // checkout: it goes aside, and its stash on the record (live-run-fixes spec 2.1).
+    let aside = '';
+    if (wip && ['usage-limit', 'unfinished'].includes(read.outcome)) {
+      const saved = await wip.save(record);
+      if (saved?.error) aside = `. Its work not committed could not be put aside (${saved.error}): put it aside yourself with git stash push --include-untracked before the next command`;
+      else if (saved) {
+        record.wip = saved;
+        store.writeState(key, { ...state, runs: [...state.runs, record] });
+        aside = `. Its work not committed is in stash ${saved.stash.slice(0, 8)}, and comes back when the run goes on`;
+      }
+    }
     // last.md gets the whole answer: it is what Claude reads to tell you what the agent said (Pilot 1, SMP-2).
     made.push({ ...record, text: read.text });
     previous = { ...record, purpose: next.purpose };
     if (read.outcome === 'usage-limit') {
-      reason = `${next.role} hit the usage limit: ${read.text}. Run the same command again after it resets; the run goes on in its session`;
+      reason = `${next.role} hit the usage limit: ${read.text}. Run the same command again after it resets; the run goes on in its session${aside}`;
       break;
     }
     if (read.outcome === 'unfinished') {
-      reason = `${next.role} stopped without a result: run the same command again; the run goes on in its session`;
+      reason = `${next.role} stopped without a result: run the same command again; the run goes on in its session${aside}`;
       break;
     }
     // After a run that may have pushed, wait for CI before deciding again, but not for a CI that never starts.

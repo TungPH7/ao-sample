@@ -7,6 +7,9 @@ on:
   pull_request:
   push:
     branches: [develop, main, 'release/**']
+  # By hand, on a branch: gh workflow run CI --ref develop. For a push made while Actions was off on the repository,
+  # which then has no run (project-scaffold T16). With no PR and no push, the jobs check the head commit alone.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -93,11 +96,17 @@ jobs:
           ref: ${{ env.HEAD_SHA }}
           fetch-depth: 0
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # A new branch has no commit before its push: Semgrep scans its head commit alone, as gitleaks does, so a finding
+      # older than the push does not block it (project-scaffold T17). The root commit of a repository, and a run by
+      # hand, get every file.
       - name: Semgrep on the changes
         run: |
           baseline=""
           case "$BASE_SHA" in
-            ''|0000000000000000000000000000000000000000) ;;
+            ''|0000000000000000000000000000000000000000)
+              if [ "$GITHUB_EVENT_NAME" = push ] && git rev-parse --verify --quiet "$HEAD_SHA^" > /dev/null; then
+                baseline="--baseline-commit $(git rev-parse "$HEAD_SHA^")"
+              fi ;;
             *) baseline="--baseline-commit $(git merge-base "$BASE_SHA" "$HEAD_SHA")" ;;
           esac
           uvx "semgrep==${SEMGREP_VERSION}" scan --config p/default --config p/owasp-top-ten --severity ERROR --error --metrics off $baseline

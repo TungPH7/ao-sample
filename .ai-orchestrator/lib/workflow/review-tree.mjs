@@ -32,6 +32,19 @@ export function isInstructionPath(path) {
   return parts.some((part) => INSTRUCTION_FOLDERS.includes(part)) || INSTRUCTION_FILES.includes(parts.at(-1));
 }
 
+// What else steers a session once a branch is checked out in the project folder, as /ao-preview does: plugins and MCP
+// servers Claude Code reads there, and the git files that change how a checkout is written, at any depth (Medium of
+// security on ao-sample PR #21; live-run-fixes spec 2.7). The worktree of a review is outside the project, and keeps
+// them.
+const STEERING_FILES = ['.mcp.json', '.gitmodules', '.gitattributes', '.lfsconfig'];
+const STEERING_FOLDERS = ['.claude-plugin'];
+
+// Whether a path of a PR steers a session in the project folder: an instruction path, or one of those.
+export function isSteeringPath(path) {
+  const parts = path.replaceAll('\\', '/').split('/').map((part) => part.toLowerCase());
+  return isInstructionPath(path) || parts.some((part) => STEERING_FOLDERS.includes(part)) || STEERING_FILES.includes(parts.at(-1));
+}
+
 // Removes them; returns the paths removed. rmSync removes a link, not what it points to. fs: { readdirSync, rmSync }.
 export function removeInstructions(dir, fs) {
   const paths = instructionPaths(dir, fs);

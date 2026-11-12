@@ -18,7 +18,8 @@
     "gh:protect": "node scripts/gh-protect.mjs",
     "skills:vendor": "node scripts/vendor-skills.mjs",
     "agents": "node scripts/render-agents.mjs",
-    "agents:check": "node scripts/render-agents.mjs --check"
+    "agents:check": "node scripts/render-agents.mjs --check",
+    "profiles:check": "node scripts/profiles-check.mjs"
   },
   "dependencies": {
     "@secretlint/node": "13.0.7",

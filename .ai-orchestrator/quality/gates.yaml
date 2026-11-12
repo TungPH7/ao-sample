@@ -8,12 +8,13 @@ checks: [policy, build-test, secrets, sast]
 # Coverage of the lines a PR adds or changes, read from the lcov files the project's test:coverage script writes. The
 # project's coverage must include every source file, even one no test imports yet. Config files and generated
 # migrations are left out (Checkpoint 1, 2026-10-29), and so is the kit copy in .ai-orchestrator/ and .claude/, whose
-# code is tested in the kit.
+# code is tested in the kit. So are the scripts at the root of a project, which run on your machine, as scripts/dev.mjs
+# starts the apps (project-scaffold T17).
 coverage:
   changed_lines_min: 80
   lcov: ["coverage/lcov.info", "apps/*/coverage/lcov.info"]
   source: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"]
-  exclude: ["**/*.{test,spec}.*", "**/*.e2e-spec.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", ".ai-orchestrator/**", ".claude/**"]
+  exclude: ["**/*.{test,spec}.*", "**/*.e2e-spec.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", "scripts/**", ".ai-orchestrator/**", ".claude/**"]
 
 # npm audit fails on this level and above. An exception names a GitHub advisory, why it is accepted, and when it ends.
 dependencies:
@@ -57,7 +58,8 @@ release_pull_requests:
   back_merge_after_release: develop
 
 # Files an agent may not edit, except the roles listed as editors. A PR of an agent that touches one is never merged by
-# merge-gate: you read the diff and merge it yourself.
+# merge-gate: you read the diff and merge it yourself. A path is compared in any case (.Claude/ is .claude/), since a
+# Windows checkout writes both into one folder.
 protected_paths:
   - { path: ".github/workflows/**", editors: [devops] }
   - { path: ".githooks/**" }
@@ -126,7 +128,8 @@ kit_copy:
   # A project adds the skills of its stack, so only the files the PR changes are compared.
   same_when_changed: [".claude/skills/**"]
   # They hold the space key and the stack skills of the project: ao-step renders them again.
-  rendered: [".claude/agents/**", ".claude/rules/ai-orchestrator.md"]
+  # settings.json takes the env of the project from its project.yaml (project-scaffold spec 2.1).
+  rendered: [".claude/agents/**", ".claude/rules/ai-orchestrator.md", ".claude/settings.json"]
   # A copy may point only at the newest PR of the other project on this path and branch, so it cannot go back to an older
   # kit.
   newest_path: .ai-orchestrator/lib
