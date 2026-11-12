@@ -58,6 +58,7 @@ describe('Notes (integration)', () => {
         title: 'Mua sữa',
         content: '2 hộp',
         createdAt: expect.stringMatching(ISO_UTC_MS),
+        pinnedAt: null,
       });
       expect(await storedNotes()).toStrictEqual([response.body]);
     });
@@ -105,6 +106,7 @@ describe('Notes (integration)', () => {
         title: 'A',
         content: '',
         createdAt: expect.stringMatching(ISO_UTC_MS),
+        pinnedAt: null,
       });
       expect((response.body as { createdAt: string }).createdAt).not.toBe(
         '1999-01-01T00:00:00.000Z',

@@ -1,9 +1,11 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   NotesLimitReachedException,
+  PinnedNotesLimitReachedException,
   ValidationFailedException,
 } from '../common/api-error.js';
 import { NotesService } from './notes.service.js';
+import { MAX_PINNED_NOTES } from './notes.shared.js';
 import { MAX_NOTES, NotesStore } from './notes.store.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -42,6 +44,7 @@ describe('NotesService', () => {
         title: 'Mua sữa',
         content: '2 hộp',
         createdAt: '2026-11-02T07:40:00.123Z',
+        pinnedAt: null,
       });
     });
 
@@ -72,7 +75,7 @@ describe('NotesService', () => {
       expect(created.content).toBe('Caf\u00e9\nline\nend');
     });
 
-    it('ignores the id, createdAt and any other field sent', () => {
+    it('ignores the id, createdAt, pinnedAt and any other field sent', () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date('2026-11-02T07:40:00.000Z'));
 
@@ -80,6 +83,7 @@ describe('NotesService', () => {
         title: 'A',
         id: 'chosen-by-client',
         createdAt: '1999-01-01T00:00:00.000Z',
+        pinnedAt: '2000-01-01T00:00:00.000Z',
         isAdmin: true,
       });
 
@@ -88,6 +92,7 @@ describe('NotesService', () => {
         title: 'A',
         content: '',
         createdAt: '2026-11-02T07:40:00.000Z',
+        pinnedAt: null,
       });
     });
 
@@ -179,6 +184,72 @@ describe('NotesService', () => {
       const second = service.create({ title: 'Second' });
 
       expect(service.list()).toStrictEqual([second, first]);
+    });
+  });
+
+  describe('pin', () => {
+    it('pins the note at the time the API received the request and answers the list', () => {
+      const first = service.create({ title: 'First' });
+      const second = service.create({ title: 'Second' });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-11T03:00:00.456Z'));
+
+      const answered = service.pin(first.id);
+
+      expect(answered).toStrictEqual([
+        { ...first, pinnedAt: '2026-11-11T03:00:00.456Z' },
+        second,
+      ]);
+      expect(service.list()).toStrictEqual(answered);
+    });
+
+    it('answers the unchanged list for a note already pinned', () => {
+      const note = service.create({ title: 'A' });
+      service.pin(note.id);
+      const before = service.list();
+
+      expect(service.pin(note.id)).toStrictEqual(before);
+    });
+
+    it('throws NotFoundException for an id the store does not hold', () => {
+      service.create({ title: 'A' });
+
+      const error = thrownBy(() => service.pin('nope'));
+
+      expect(error).toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws PinnedNotesLimitReachedException for a fourth note and changes nothing', () => {
+      const notes = ['A', 'B', 'C', 'D'].map((title) => service.create({ title }));
+      notes.slice(0, MAX_PINNED_NOTES).forEach(({ id }) => service.pin(id));
+      const before = service.list();
+
+      const error = thrownBy(() => service.pin(notes[3].id));
+
+      expect(error).toBeInstanceOf(PinnedNotesLimitReachedException);
+      expect(service.list()).toStrictEqual(before);
+    });
+  });
+
+  describe('unpin', () => {
+    it('unpins the note and answers the list', () => {
+      const first = service.create({ title: 'First' });
+      const second = service.create({ title: 'Second' });
+      service.pin(first.id);
+
+      expect(service.unpin(first.id)).toStrictEqual([second, first]);
+    });
+
+    it('answers the unchanged list for a note that is not pinned', () => {
+      const note = service.create({ title: 'A' });
+
+      expect(service.unpin(note.id)).toStrictEqual([note]);
+    });
+
+    it('throws NotFoundException for an id the store does not hold', () => {
+      const error = thrownBy(() => service.unpin('__proto__'));
+
+      expect(error).toBeInstanceOf(NotFoundException);
     });
   });
 });

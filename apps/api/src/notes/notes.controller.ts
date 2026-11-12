@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
+  Param,
   Post,
+  Put,
   Req,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
@@ -11,7 +14,8 @@ import type { Request } from 'express';
 import type { Note, NoteList } from './notes.shared.js';
 import { NotesService } from './notes.service.js';
 
-// GET and POST /notes, as in the API Contract of docs/specs/SMP-2/plan.md.
+// GET and POST /notes, as in the API Contract of docs/specs/SMP-2/plan.md, and
+// PUT and DELETE /notes/:id/pin, as in the API Contract of docs/specs/SMP-23/plan.md.
 // Errors are thrown and answered by ApiExceptionFilter in the one error shape.
 @Controller('notes')
 export class NotesController {
@@ -31,5 +35,19 @@ export class NotesController {
       throw new UnsupportedMediaTypeException();
     }
     return this.notes.create(body);
+  }
+
+  // No body, Content-Type or query is read: an HTML form cannot send PUT or
+  // DELETE, and the API answers no CORS preflight (ADR-0004).
+  @Put(':id/pin')
+  @Header('Cache-Control', 'no-store')
+  pin(@Param('id') id: string): NoteList {
+    return { data: this.notes.pin(id) };
+  }
+
+  @Delete(':id/pin')
+  @Header('Cache-Control', 'no-store')
+  unpin(@Param('id') id: string): NoteList {
+    return { data: this.notes.unpin(id) };
   }
 }

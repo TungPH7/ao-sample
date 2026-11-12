@@ -15,6 +15,7 @@ const STORED: Note = {
   title: 'Mua sữa',
   content: '2 hộp',
   createdAt: '2026-11-02T07:40:00.000Z',
+  pinnedAt: null,
 };
 
 function json(body: unknown, status: number): Response {

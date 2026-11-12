@@ -18,10 +18,10 @@ Danh sách ghi chú xếp mới nhất lên đầu (SPEC của SMP-2), nên mỗ
 
 **Thứ tự danh sách.** Quy tắc này thay cho quy tắc "mới nhất lên đầu" ở mục Rules của SPEC SMP-2:
 
-1. Các ghi chú đã ghim đứng đầu. Ghi chú ghim gần nhất đứng trên, theo thứ tự API nhận yêu cầu ghim, kể cả hai lần ghim trong cùng một mili giây.
+1. Các ghi chú đã ghim đứng đầu. Trong nhóm này, ghi chú ghim trước đứng trên, ghi chú ghim sau xếp ngay dưới, theo thứ tự API nhận yêu cầu ghim, kể cả hai lần ghim trong cùng một mili giây. Nhờ vậy đầu danh sách không đổi khi ghim thêm một ghi chú.
 2. Sau đó tới các ghi chú chưa ghim, giữ thứ tự của SMP-2: mới nhất lên đầu, theo thứ tự API nhận yêu cầu tạo.
 3. Bỏ ghim một ghi chú thì nó về đúng chỗ của nó theo thời gian tạo, giữa các ghi chú chưa ghim, chứ không lên đầu.
-4. Ghim lại một ghi chú vừa bỏ ghim thì nó lên đầu nhóm đã ghim, như một lần ghim mới.
+4. Ghim lại một ghi chú vừa bỏ ghim thì nó xuống cuối nhóm đã ghim, như một lần ghim mới, chứ không về chỗ cũ trong nhóm.
 5. Ghi chú mới tạo đứng đầu nhóm chưa ghim, tức ngay dưới các ghi chú đã ghim. Khi chưa ghim ghi chú nào thì vẫn là đầu danh sách, như SMP-2.
 
 **Giới hạn.** Tối đa 3 ghi chú được ghim cùng lúc. API kiểm giới hạn này, không chỉ giao diện chặn. Con số 3 là một hằng số có tên, dùng chung cho web và API.
@@ -63,8 +63,8 @@ Danh sách ghi chú xếp mới nhất lên đầu (SPEC của SMP-2), nên mỗ
 
 **Story: Ghim và bỏ ghim.** Là người dùng, tôi muốn ghim tối đa 3 ghi chú quan trọng lên đầu danh sách, và bỏ ghim một ghi chú khi không cần nó ở đầu nữa, để ghi chú mới không đẩy chúng xuống, và đầu danh sách luôn gọn, đúng là những ghi chú quan trọng nhất.
 
-- AC1: Given ghi chú A chưa ghim và đang có ít hơn 3 ghi chú được ghim, When bấm Ghim ở A, Then A lên đầu danh sách với dấu "Đã ghim", nút của A thành "Bỏ ghim", focus ở lại nút của A, và không cần tải lại trang.
-- AC2: Given đã ghim A rồi tới B, và có hai ghi chú chưa ghim C rồi D (D tạo sau C), When tải lại trang, hoặc mở trang Ghi chú ở một trình duyệt khác, Then thấy theo thứ tự B, A, D, C; B và A có dấu "Đã ghim", còn D và C thì không.
+- AC1: Given ghi chú A chưa ghim và đang có ít hơn 3 ghi chú được ghim, When bấm Ghim ở A, Then A có dấu "Đã ghim" và đứng cuối nhóm đã ghim, ngay dưới các ghi chú đã ghim trước đó và trên mọi ghi chú chưa ghim (ở đầu danh sách nếu chưa có ghi chú nào được ghim); các ghi chú đã ghim trước đó giữ nguyên chỗ; nút của A thành "Bỏ ghim", focus ở lại nút của A, và không cần tải lại trang.
+- AC2: Given đã ghim A rồi tới B, và có hai ghi chú chưa ghim C rồi D (D tạo sau C), When tải lại trang, hoặc mở trang Ghi chú ở một trình duyệt khác, Then thấy theo thứ tự A, B, D, C; A và B có dấu "Đã ghim", còn D và C thì không.
 - AC3: Given A đã được ghim, When tạo ghi chú mới E bằng form, Then A vẫn ở đầu danh sách, còn E hiện ngay dưới các ghi chú đã ghim, trên mọi ghi chú chưa ghim khác, và không cần tải lại trang.
 - AC4: Given đã bấm Ghim hoặc Bỏ ghim ở A và API chưa trả lời, When bấm nút đó thêm lần nữa, Then chỉ một yêu cầu được gửi, và A chỉ đổi trạng thái một lần.
 - AC5: Given API không ghim được, do lỗi mạng, lỗi máy chủ hoặc quá 10 s không trả lời, When bấm Ghim ở A, Then A vẫn chưa ghim và ở nguyên chỗ, và thấy "Không ghim được ghi chú. Vui lòng thử lại." ngay cạnh A, không ở ghi chú nào khác.
@@ -189,7 +189,7 @@ test('AC1 pins a note to the top of the list without reloading the page', async 
 ## Testing Strategy
 
 - **Unit, viết theo TDD cho mỗi Story** (Vitest):
-  - Ở API: kho ghim và bỏ ghim; giới hạn 3, gồm biên 2, 3 và 4; thứ tự theo mục Rules: ghim gần nhất lên trên, hai lần ghim cùng mili giây, bỏ ghim về đúng chỗ theo thời gian tạo, ghim lại lên đầu; ghim hai lần và bỏ ghim ghi chú chưa ghim không đổi gì; `id` lạ.
+  - Ở API: kho ghim và bỏ ghim; giới hạn 3, gồm biên 2, 3 và 4; thứ tự theo mục Rules: ghim trước đứng trên, ghim sau xếp ngay dưới, hai lần ghim cùng mili giây, bỏ ghim về đúng chỗ theo thời gian tạo, ghim lại xuống cuối nhóm đã ghim; ghim hai lần và bỏ ghim ghi chú chưa ghim không đổi gì; `id` lạ.
   - Ở web: thứ tự sau khi ghim và bỏ ghim; khóa và mở nút ở 3; dòng nhắc; lỗi riêng của từng ghi chú và lúc nó mất; bấm đôi; focus sau khi ghi chú đổi chỗ.
 - **Integration, viết theo TDD cho mỗi Story:**
   - API qua supertest: ghim, bỏ ghim, 409 ở ghi chú thứ tư, 404 với `id` lạ, idempotent, thứ tự và trạng thái ghim trong `GET`, method hay `Content-Type` mà form HTML gửi được bị từ chối.

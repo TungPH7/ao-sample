@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   NotesLimitReachedException,
+  PinnedNotesLimitReachedException,
   ValidationFailedException,
 } from '../common/api-error.js';
 import { checkNote, type Note } from './notes.shared.js';
@@ -37,6 +42,7 @@ export class NotesService {
       title: checked.value.title,
       content: checked.value.content,
       createdAt: new Date().toISOString(),
+      pinnedAt: null, // a new note is never pinned, whatever the body sends
     };
     if (!this.store.add(note)) {
       throw new NotesLimitReachedException();
@@ -45,6 +51,29 @@ export class NotesService {
   }
 
   list(): Note[] {
+    return this.store.list();
+  }
+
+  // Pins the note at the time the API received the request, and answers the
+  // list right after it (docs/specs/SMP-23/plan.md, API Contract). Pinning a
+  // pinned note changes nothing.
+  pin(id: string): Note[] {
+    const result = this.store.pin(id, new Date().toISOString());
+    if (result === 'NOT_FOUND') {
+      throw new NotFoundException();
+    }
+    if (result === 'LIMIT_REACHED') {
+      throw new PinnedNotesLimitReachedException();
+    }
+    return this.store.list();
+  }
+
+  // Unpins the note and answers the list right after it. Unpinning a note that
+  // is not pinned changes nothing.
+  unpin(id: string): Note[] {
+    if (this.store.unpin(id) === 'NOT_FOUND') {
+      throw new NotFoundException();
+    }
     return this.store.list();
   }
 }

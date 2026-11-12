@@ -18,6 +18,7 @@ interface StoredNote {
   title: string;
   content: string;
   createdAt: string;
+  pinnedAt: string | null;
 }
 
 function uniqueTitle(code: string): string {
@@ -34,6 +35,7 @@ function fullStore(prefix: string): StoredNote[] {
       title: `${prefix} N${n}`,
       content: '',
       createdAt: new Date(start + n * 1000).toISOString(),
+      pinnedAt: null,
     };
   });
 }

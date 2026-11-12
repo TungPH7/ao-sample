@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | 'PAYLOAD_TOO_LARGE'
   | 'UNSUPPORTED_MEDIA_TYPE'
   | 'NOTES_LIMIT_REACHED'
+  | 'PINNED_NOTES_LIMIT_REACHED'
   | 'REQUEST_FAILED'
   | 'INTERNAL_ERROR';
 
@@ -34,3 +35,7 @@ export class ValidationFailedException extends BadRequestException {
 // Thrown when the store of notes is full; the filter answers it as 409
 // NOTES_LIMIT_REACHED. Any other ConflictException stays REQUEST_FAILED.
 export class NotesLimitReachedException extends ConflictException {}
+
+// Thrown when MAX_PINNED_NOTES notes are already pinned (docs/specs/SMP-23/plan.md,
+// decision 4); the filter answers it as 409 PINNED_NOTES_LIMIT_REACHED.
+export class PinnedNotesLimitReachedException extends ConflictException {}
