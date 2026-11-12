@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.0] - 2026-11-13
+
+### Added
+
+- Ghim tối đa 3 ghi chú lên đầu danh sách, và bỏ ghim, ngay trên danh sách mà không cần tải lại trang. Ghi chú đã ghim có dấu "Đã ghim" và nằm trên cùng, ghim trước đứng trên. Bỏ ghim thì ghi chú về đúng chỗ theo thời gian tạo. Khi đã đủ 3, nút Ghim của các ghi chú khác bị khóa, kèm dòng nhắc "Bỏ ghim một ghi chú để ghim ghi chú này". Ghim hay bỏ ghim không thành thì ghi chú giữ nguyên chỗ và lỗi hiện ngay cạnh nó. Trình đọc màn hình đọc được nút, dòng nhắc và thông báo khi ghim xong (SMP-24, Epic SMP-23).
+- API `PUT /notes/:id/pin` và `DELETE /notes/:id/pin`, trả về cả danh sách đã xếp. API tự kiểm giới hạn 3: quá giới hạn thì trả 409 `PINNED_NOTES_LIMIT_REACHED`; `id` lạ, kể cả `id` có mã `%` không giải mã ra UTF-8, thì trả 404 `NOT_FOUND`. Ghim hai lần hay bỏ ghim ghi chú chưa ghim đều thành công và không đổi gì. Web chuyển thêm đúng đường `/api/notes/:id/pin` tới API (SMP-24, ADR-0004).
+- `Note` có thêm trường `pinnedAt` (ISO 8601 UTC, `null` khi chưa ghim) và hằng số `MAX_PINNED_NOTES = 3`, dùng chung cho web và API (SMP-24, ADR-0001).
+
+### Changed
+
+- Thứ tự danh sách: các ghi chú đã ghim đứng đầu, sau đó mới tới các ghi chú chưa ghim, mới nhất ở đầu như trước. Ghi chú mới tạo hiện ngay dưới các ghi chú đã ghim (SMP-24, thay cho quy tắc "mới nhất lên đầu" của SPEC SMP-2).
+- `GET /notes` và `POST /notes` trả thêm `pinnedAt` cho mỗi ghi chú. Đây là thay đổi cộng thêm (SMP-24).
+- Cập nhật bản chép kit ai-orchestrator tới `c6fdfa8`, có human-loop và A1, và thêm `.ai-orchestrator/preview.yaml` cho `/ao-preview`. Không đổi code của app (SMP-22).
+
+### Fixed
+
+Không có.
+
+### Known Issues
+
+Không có Bug nào mở (regression ngày 2026-11-13, 54/54 test pass trên Staging). Các giới hạn có chủ ý của bản này, theo SPEC của SMP-23:
+
+- Trạng thái ghim nằm trong bộ nhớ của API cùng ghi chú, nên mất khi API khởi động lại và sau mỗi lần deploy.
+- Ứng dụng không có đăng nhập, nên mọi người dùng chung các ghi chú đã ghim: ai cũng ghim và bỏ ghim được mọi ghi chú, và chưa có giới hạn tần suất. Epic SMP-19 xử lý việc này.
+- Trang không tự cập nhật khi người khác ghim hay bỏ ghim: người dùng thấy trạng thái mới khi tải lại trang.
+
 ## [0.1.0] - 2026-11-10
 
 ### Added
