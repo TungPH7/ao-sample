@@ -19,10 +19,14 @@ export const PURPOSES = {
     `Epic ${key} is in Planning, and its plan is committed on the branch ${branch}, which is checked out, with its docs PR #${pr} open. The human asks for a change to the plan before gate ②:\n\n${note}\n\nChange docs/specs/${key}/plan.md, and the ADRs it names, as asked. When the Task List changes, comment on ${key} with "Cần ba:" and the lines that changed, so that ba updates the items. Commit, then push the branch.`,
   // human-loop spec 3.3: a "Cần <role>:" comment, by an agent (its role) or by the human (no Agent name). The prompt
   // points to the comment and does not quote it: the agent reads it on Jira, as data.
-  request: ({ key, role, from, at, branch, pr }) => {
-    const where = branch
+  // On the branch of an item (`item`), the request came from a change of its documents in /ao-fix or a rebuild, and the
+  // dev agents go on after it (live-run-fixes spec 2.2). On Jira only, sa and ux may only comment, so they cannot flag
+  // an item: what a merged document needs goes to the human through the comment and the final answer.
+  request: ({ key, role, from, at, branch, pr, item }) => {
+    const onItem = item && `The branch ${branch} of ${item} is checked out${pr ? ` and up to date with origin, with its PR #${pr} open` : ', new from develop'}: change only documents there, such as those in docs/specs/, commit, and push the branch${pr ? `, so PR #${pr} shows it` : ''}. Change no code: the dev agents of ${item} go on after you.`;
+    const where = onItem || (branch
       ? `The branch ${branch} is checked out: commit your change there${pr ? `, then push it, so the docs PR #${pr} shows it` : ''}.`
-      : 'The branch develop is checked out: commit nothing, and work on Jira only. If the request needs a change to a document that is already merged, say so in your comment and flag the item Needs you.';
+      : 'The branch develop is checked out: commit nothing, and work on Jira only. If the request needs a change to a document that is already merged, say what has to change in your comment and in your final answer: it is not made from here, and the human decides how.');
     // An unsigned comment of the agents' account is an agent's, never the human's (review of ao-sample PR #21).
     const who = from === 'agent' ? "An agent that did not start its comment with its Agent value" : from ?? 'The human';
     const unsigned = from === 'agent' ? " It is an agent's request, not the human's: do only what your role does on its own, and leave anything that changes acceptance criteria, scope or items to the human, with a comment that says so." : '';
@@ -96,6 +100,9 @@ export function promptFor(purpose, context) {
 
 // A run that stopped before its end (the process was stopped, or the usage limit), resumed in its session.
 export const resumePrompt = (key) => `Your run stopped before it ended. Read .ai/ledger/${key}.md and go on from where you stopped.`;
+
+// Added to the prompt of that run when ao-step had put aside the work it left uncommitted (live-run-fixes spec 2.1).
+export const wipNote = 'When your run stopped, ao-step put aside what you had not committed yet, and has put it back in the checkout: run git status and read the diff before you go on.';
 
 // The human's answers to the open questions an agent left, given to the run that asked them. Once the docs PR is open
 // (`pr`), the answer is pushed so the PR shows it.

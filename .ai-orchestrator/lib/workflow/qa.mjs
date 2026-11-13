@@ -17,8 +17,10 @@ const title = (env) => `${env[0].toUpperCase()}${env.slice(1)}`;
 const TRACE = /(^|\/)trace\.zip$/;
 const MEDIA = /\.(png|jpe?g|gif|webp|webm|mp4)$/i;
 
-// run: the qa run ({ key, qa: { environment, sha, auth } }); tree: its worktree ({ path }). list(dir) gives the files
-// under a folder, [] when there is none; attach(key, files) resolves { attached, skipped } (lib/tracker/attachments.mjs);
+// run: the qa run ({ key, startedAt, qa: { environment, sha, auth } }); tree: its worktree ({ path }). list(dir) gives
+// the files under a folder as { path, mtimeMs }, [] when there is none. Only those written since the run started count:
+// qa may move the evidence of an earlier run into a subfolder, and it went to Jira again (live-run-fixes spec 2.5).
+// attach(key, files) resolves { attached, skipped } (lib/tracker/attachments.mjs);
 // keep(key, files) copies files out of the worktree and resolves the folder; running(environment) resolves the sha that
 // runs there now. Resolves notes for state.json and last.md.
 // Behind basic auth (qa.auth) the traces are kept, not attached: Playwright writes the context options, httpCredentials
@@ -27,9 +29,12 @@ const MEDIA = /\.(png|jpe?g|gif|webp|webm|mp4)$/i;
 export async function qaFollowUp({ run, tree, projectDir, list, attach, keep, running }) {
   const notes = [];
   const dir = (path) => path.replaceAll('\\', '/').replace(/\/+$/, '');
-  const traces = tree ? list(`${dir(tree.path)}/test-results`).filter((file) => TRACE.test(file)) : [];
+  // A run with no start on record keeps every file, as before.
+  const since = Date.parse(run.startedAt ?? '');
+  const written = (folder) => list(folder).filter(({ mtimeMs }) => Number.isNaN(since) || mtimeMs >= since).map(({ path }) => path);
+  const traces = tree ? written(`${dir(tree.path)}/test-results`).filter((file) => TRACE.test(file)) : [];
   const local = run.qa.auth ? traces : [];
-  const folder = list(`${dir(projectDir)}/.ai/qa/${run.key}`);
+  const folder = written(`${dir(projectDir)}/.ai/qa/${run.key}`);
   const held = run.qa.auth ? folder.filter((file) => !MEDIA.test(file)) : [];
   const files = [...folder.filter((file) => !held.includes(file)), ...(run.qa.auth ? [] : traces)];
   if (files.length > 0) {

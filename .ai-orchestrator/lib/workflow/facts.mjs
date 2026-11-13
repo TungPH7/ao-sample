@@ -164,14 +164,19 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     mergeCommit: pr.merged_at ? pr.merge_commit_sha : null,
     mergedAt: pr.merged_at ?? null,
     draft: Boolean(pr.draft),
-    // A PR from a fork may share the name of a branch here; /ao-preview runs only branches of this repository.
-    fromFork: Boolean(pr.head?.repo?.full_name && pr.base?.repo?.full_name && pr.head.repo.full_name !== pr.base.repo.full_name),
+    // A PR from a fork may share the name of a branch here; /ao-preview runs only branches of this repository. Only a
+    // head and base both named this repository count as one: GitHub gives head.repo null once the fork is deleted
+    // (live-run-fixes spec 2.8).
+    fromFork: !(pr.head?.repo?.full_name && pr.head.repo.full_name === pr.base?.repo?.full_name),
     author: pr.user?.login ?? null,
     headRef: pr.head.ref,
     headSha: head,
     base: pr.base.ref,
     // A renamed file by both names, as protectedPaths counts it: moved out of a risky path, it is still risky.
     files: files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename])),
+    // GitHub lists at most 3000 files of a PR: /ao-preview checks only a PR it read whole (live-run-fixes spec 2.7).
+    changedFiles: pr.changed_files ?? null,
+    filesRead: files.length,
     protectedPaths: protectedPaths(files, gates),
     docsEpic: docsPullRequest({ pr, files, gates, apps, space }),
     ci: { green: checks.green, failed: checks.failed, pending: !checks.green && !checks.failed, started: checks.started },

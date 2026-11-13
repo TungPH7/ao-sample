@@ -6,11 +6,13 @@ import { matchesGlob } from './glob.mjs';
 // Headers git writes itself, for a merge or a revert.
 const GIT_WRITTEN = [/^Merge (branch|branches|remote-tracking branch|pull request|tag|commit) /, /^Revert ".*"$/];
 
-// commit-msg: the first line that is not a comment must follow type(scope): subject (<KEY>).
-export function checkCommitMessage(message) {
+// commit-msg: the first line that is not a comment must follow type(scope): subject (<KEY>). The root commit of a new
+// repository (`root`) needs no key: it comes before the Jira space has an item, and no PR can carry it (project-scaffold
+// T16).
+export function checkCommitMessage(message, { root = false } = {}) {
   const header = message.split(/\r?\n/).find((line) => line.trim() !== '' && !line.startsWith('#')) ?? '';
   if (GIT_WRITTEN.some((pattern) => pattern.test(header))) return { ok: true };
-  return checkCommit(header);
+  return checkCommit(header, { requireKey: !root });
 }
 
 const ZERO = /^0+$/;

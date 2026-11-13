@@ -113,7 +113,7 @@ export function changedPaths(paths, gates) {
   if (paths.length <= MAX_LISTED || !gates) return paths.join(', ');
   const counts = new Map();
   for (const name of paths) {
-    const glob = gates.protected_paths.find(({ path }) => matchesGlob(path, name))?.path ?? name;
+    const glob = protectedGlob(name, gates) ?? name;
     counts.set(glob, (counts.get(glob) ?? 0) + 1);
   }
   return `${paths.length} protected files: ${[...counts].map(([glob, n]) => `${glob} (${n})`).join(', ')}`;
@@ -331,10 +331,14 @@ export function approved({ pr, reviews, approvers, authorApproves = false }) {
   });
 }
 
+// The protected path a file is under, compared in any case: on Windows (NTFS) a checkout writes .Claude/rules/x.md into
+// .claude/rules/ (live-run-fixes spec 2.9). undefined when there is none.
+const protectedGlob = (name, gates) => gates.protected_paths.find(({ path }) => matchesGlob(path, name, { ignoreCase: true }))?.path;
+
 // The protected paths among the PR's files; a renamed file counts by its old name too.
 export function protectedPaths(files, gates) {
   const names = files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename]));
-  return [...new Set(names.filter((name) => gates.protected_paths.some(({ path }) => matchesGlob(path, name))))];
+  return [...new Set(names.filter((name) => protectedGlob(name, gates) !== undefined))];
 }
 
 // The body of the squash commit: the header of each commit of the PR, merge commits left out, so the Sub-task keys

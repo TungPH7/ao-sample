@@ -1,9 +1,10 @@
-// Generates the agents and the shared rules file (agent-roster spec 2.1, 2.6) from agents/, the contract,
-// quality/gates.yaml and tracker/jira.yaml. --check writes nothing and fails when a generated file is stale. --list prints
-// the files it writes, one path per line, and writes nothing: ao-step refuses a kit copy with any other file among them.
-// In the kit repo it writes kit/.claude/. With --project <dir> it reads the kit copy in <dir>/.ai-orchestrator/, adds the
-// stack skills of its roster.local.yaml, takes the space key from AO_JIRA_SPACE in <dir>/.claude/settings.json, and
-// writes <dir>/.claude/.
+// Generates the agents, the shared rules file (agent-roster spec 2.1, 2.6) and settings.json (project-scaffold spec 2.1)
+// from agents/, the contract, quality/gates.yaml and tracker/jira.yaml. --check writes nothing and fails when a generated
+// file is stale. --list prints the files it writes, one path per line, and writes nothing: ao-step refuses a kit copy
+// with any other file among them. In the kit repo it writes kit/.claude/, settings.json with its placeholders. With
+// --project <dir> it reads the kit copy in <dir>/.ai-orchestrator/, adds the stack skills of its roster.local.yaml, and
+// writes <dir>/.claude/. A project with .ai-orchestrator/project.yaml gets its space key and settings.json from it; one
+// without keeps its own settings.json, and the space key in it.
 // Usage: node scripts/render-agents.mjs [--check | --list] [--project <dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -12,8 +13,10 @@ import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
 import { renderAll } from '../lib/agents/render.mjs';
 import { mergeLocal, readRoster } from '../lib/agents/roster.mjs';
+import { renderSettings } from '../lib/agents/settings.mjs';
 import { readContract } from '../lib/contract.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
+import { PROJECT_FILE, readProjectConfig } from '../lib/scaffold/project-config.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 
 const { values } = parseArgs({ options: { check: { type: 'boolean' }, list: { type: 'boolean' }, project: { type: 'string' } } });
@@ -24,6 +27,16 @@ const where = project ? '.claude/' : 'kit/.claude/';
 
 let roster = readRoster(join(kitDir, 'agents'));
 let space;
+// The project's own config, or null: in the kit, or in a project that has none yet.
+let config = null;
+if (project && existsSync(join(project, PROJECT_FILE))) {
+  const read = readProjectConfig(readFileSync(join(project, PROJECT_FILE), 'utf8'));
+  if (read.errors.length > 0) {
+    for (const { rule, path, message } of read.errors) console.error(`${rule} ${path}: ${message}`);
+    process.exit(1);
+  }
+  config = read.config;
+}
 if (project) {
   const localFile = join(kitDir, 'roster.local.yaml');
   const local = existsSync(localFile) ? parse(readFileSync(localFile, 'utf8')) : undefined;
@@ -34,7 +47,7 @@ if (project) {
   }
   roster = merged.roster;
   const settings = join(project, '.claude', 'settings.json');
-  const key = existsSync(settings) ? JSON.parse(readFileSync(settings, 'utf8')).env?.AO_JIRA_SPACE : undefined;
+  const key = config ? config.jira.space : existsSync(settings) ? JSON.parse(readFileSync(settings, 'utf8')).env?.AO_JIRA_SPACE : undefined;
   if (key && key !== '<KEY>') space = key;
 }
 
@@ -49,6 +62,7 @@ const sources = {
 };
 
 const files = renderAll(sources);
+if (!project || config) files.set('settings.json', renderSettings(JSON.parse(readFileSync(join(kitDir, 'agents', 'settings.json'), 'utf8')), config));
 const stale = [...files].filter(([path, text]) => {
   const file = join(outDir, path);
   return !existsSync(file) || readFileSync(file, 'utf8') !== text;
